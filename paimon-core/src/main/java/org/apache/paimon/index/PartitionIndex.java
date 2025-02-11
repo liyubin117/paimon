@@ -24,9 +24,6 @@ import org.apache.paimon.table.sink.KeyAndBucketExtractor;
 import org.apache.paimon.utils.Int2ShortHashMap;
 import org.apache.paimon.utils.IntIterator;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -42,7 +39,6 @@ import static org.apache.paimon.index.HashIndexFile.HASH_INDEX;
 
 /** Bucket Index Per Partition. */
 public class PartitionIndex {
-    private static final Logger LOG = LoggerFactory.getLogger(PartitionIndex.class);
 
     public final Int2ShortHashMap hash2Bucket;
 
@@ -107,8 +103,7 @@ public class PartitionIndex {
                         hash2Bucket.put(hash, (short) i);
                         return i;
                     } else {
-                        // No need to enter the next iteration because the upper bound has been
-                        // exceeded
+                        // No need to enter the next iteration when upper bound exceeded
                         break;
                     }
                 }

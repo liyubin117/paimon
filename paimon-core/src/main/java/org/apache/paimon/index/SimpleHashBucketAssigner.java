@@ -101,11 +101,9 @@ public class SimpleHashBucketAssigner implements BucketAssigner {
                         || maxBucketId < maxBucketsNum - 1) {
                     loadNewBucket();
                 } else {
-                    int bucket =
+                    currentBucket =
                             KeyAndBucketExtractor.bucketWithUpperBound(
                                     bucketInformation.keySet(), hash, bucketInformation.size());
-                    hash2Bucket.put(hash, (short) bucket);
-                    return bucket;
                 }
             }
             bucketInformation.compute(currentBucket, (i, l) -> l == null ? 1L : l + 1);
@@ -120,11 +118,9 @@ public class SimpleHashBucketAssigner implements BucketAssigner {
                     if (-1 == maxBucketsNum || i <= maxBucketsNum - 1) {
                         currentBucket = i;
                         return;
-                    } else {
-                        // No need to enter the next iteration because the upper bound has been
-                        // exceeded
-                        return;
                     }
+                    // No need to enter the next iteration when upper bound exceeded
+                    return;
                 }
             }
             throw new RuntimeException(
