@@ -87,15 +87,25 @@ public class SimpleHashBucketAssigner implements BucketAssigner {
             }
 
             Long num = bucketInformation.computeIfAbsent(currentBucket, i -> 0L);
+
             if (num >= targetBucketRowNumber) {
-                if (-1 != maxBucketsNum && bucketInformation.size() >= maxBucketsNum) {
+                int maxBucketId =
+                        bucketInformation.isEmpty()
+                                ? 0
+                                : bucketInformation.keySet().stream()
+                                        .mapToInt(Integer::intValue)
+                                        .max()
+                                        .getAsInt();
+                if (-1 == maxBucketsNum
+                        || bucketInformation.isEmpty()
+                        || maxBucketId < maxBucketsNum - 1) {
+                    loadNewBucket();
+                } else {
                     int bucket =
                             KeyAndBucketExtractor.bucketWithUpperBound(
-                                    bucketInformation.keySet(), hash, maxBucketsNum);
+                                    bucketInformation.keySet(), hash, bucketInformation.size());
                     hash2Bucket.put(hash, (short) bucket);
                     return bucket;
-                } else {
-                    loadNewBucket();
                 }
             }
             bucketInformation.compute(currentBucket, (i, l) -> l == null ? 1L : l + 1);
@@ -106,8 +116,15 @@ public class SimpleHashBucketAssigner implements BucketAssigner {
         private void loadNewBucket() {
             for (int i = 0; i < Short.MAX_VALUE; i++) {
                 if (isMyBucket(i) && !bucketInformation.containsKey(i)) {
-                    currentBucket = i;
-                    return;
+                    // The new bucketId may still be larger than the upper bound
+                    if (-1 == maxBucketsNum || i <= maxBucketsNum - 1) {
+                        currentBucket = i;
+                        return;
+                    } else {
+                        // No need to enter the next iteration because the upper bound has been
+                        // exceeded
+                        return;
+                    }
                 }
             }
             throw new RuntimeException(

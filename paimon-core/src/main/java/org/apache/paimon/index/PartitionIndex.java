@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -101,24 +100,32 @@ public class PartitionIndex {
             // 3. create a new bucket
             for (int i = 0; i < Short.MAX_VALUE; i++) {
                 if (bucketFilter.test(i) && !totalBucket.contains(i)) {
-                    nonFullBucketInformation.put(i, 1L);
-                    totalBucket.add(i);
-                    hash2Bucket.put(hash, (short) i);
-                    return i;
+                    // The new bucketId may still be larger than the upper bound
+                    if (-1 == maxBucketsNum || i <= maxBucketsNum - 1) {
+                        nonFullBucketInformation.put(i, 1L);
+                        totalBucket.add(i);
+                        hash2Bucket.put(hash, (short) i);
+                        return i;
+                    } else {
+                        // No need to enter the next iteration because the upper bound has been
+                        // exceeded
+                        break;
+                    }
                 }
             }
-
-            throw new RuntimeException(
-                    String.format(
-                            "Too more bucket %s, you should increase target bucket row number %s.",
-                            maxBucketId, targetBucketRowNumber));
-        } else {
-            // exceed buckets upper bound
-            int bucket =
-                    KeyAndBucketExtractor.bucketWithUpperBound(totalBucket, hash, maxBucketsNum);
-            hash2Bucket.put(hash, (short) bucket);
-            return bucket;
+            if (-1 == maxBucketsNum) {
+                throw new RuntimeException(
+                        String.format(
+                                "Too more bucket %s, you should increase target bucket row number %s.",
+                                maxBucketId, targetBucketRowNumber));
+            }
         }
+
+        // exceed buckets upper bound
+        int bucket =
+                KeyAndBucketExtractor.bucketWithUpperBound(totalBucket, hash, totalBucket.size());
+        hash2Bucket.put(hash, (short) bucket);
+        return bucket;
     }
 
     public static PartitionIndex loadIndex(
@@ -152,43 +159,5 @@ public class PartitionIndex {
             }
         }
         return new PartitionIndex(mapBuilder.build(), buckets, targetBucketRowNumber);
-    }
-
-    public static int[] getMaxBucketsPerAssigner(int maxBuckets, int assigners) {
-        int[] maxBucketsArr = new int[assigners];
-        if (-1 == maxBuckets) {
-            Arrays.fill(maxBucketsArr, -1);
-            return maxBucketsArr;
-        }
-        if (0 >= maxBuckets) {
-            throw new IllegalArgumentException(
-                    "Max-buckets should either be equal to -1 (unlimited), or it must be greater than 0 (fixed upper bound).");
-        }
-        int avg = maxBuckets / assigners;
-        int remainder = maxBuckets % assigners;
-        for (int i = 0; i < assigners; i++) {
-            maxBucketsArr[i] = avg;
-            if (remainder > 0) {
-                maxBucketsArr[i]++;
-                remainder--;
-            }
-        }
-        LOG.info(
-                "After distributing max-buckets '{}' to '{}' assigners evenly, maxBuckets layout: '{}'.",
-                maxBuckets,
-                assigners,
-                Arrays.toString(maxBucketsArr));
-        return maxBucketsArr;
-    }
-
-    public static int getSpecifiedMaxBuckets(int[] maxBucketsArr, int assignerId) {
-        int length = maxBucketsArr.length;
-        if (length == 0) {
-            throw new IllegalStateException("maxBuckets layout should exists!");
-        } else if (assignerId < length) {
-            return maxBucketsArr[assignerId];
-        } else {
-            return -1 == maxBucketsArr[0] ? -1 : 0;
-        }
     }
 }
