@@ -100,12 +100,13 @@ under the License.
         <assertj.version>3.23.1</assertj.version>
         <javax.annotation-api.version>1.3.2</javax.annotation-api.version>
         <!-- XmxMax / forkCountITCase -->
-        <flink.XmxITCase>2048m</flink.XmxITCase>
+        <flink.XmxITCase>2560m</flink.XmxITCase>
         <!-- XmxMax / forkCountUnitTest -->
-        <flink.XmxUnitTest>1024m</flink.XmxUnitTest>
+        <flink.XmxUnitTest>768m</flink.XmxUnitTest>
         <flink.forkCountITCase>2</flink.forkCountITCase>
-        <flink.forkCountUnitTest>2</flink.forkCountUnitTest>
+        <flink.forkCountUnitTest>4</flink.forkCountUnitTest>
         <flink.reuseForks>true</flink.reuseForks>
+        <flink.surefire.baseArgLine>-XX:+UseG1GC -Xms256m</flink.surefire.baseArgLine>
         <testcontainers.version>1.19.1</testcontainers.version>
         <iceberg.version>1.6.1</iceberg.version>
         <parquet.version>1.13.1</parquet.version>
@@ -556,6 +557,7 @@ under the License.
                     <trimStackTrace>false</trimStackTrace>
                     <systemPropertyVariables>
                         <forkNumber>0${surefire.forkNumber}</forkNumber>
+                        <mvn.forkNumber>$${surefire.forkNumber}</mvn.forkNumber>
                         <checkpointing.randomization>false</checkpointing.randomization>
                         <project.basedir>${project.basedir}</project.basedir>
                         <!--suppress MavenModelInspection -->
@@ -564,7 +566,17 @@ under the License.
                         <test.flink.version>${test.flink.version}</test.flink.version>
                         <!-- for junit5 -->
                         <junit.jupiter.extensions.autodetection.enabled>true</junit.jupiter.extensions.autodetection.enabled>
+                        <!-- Enabled the parallel test execution feature. -->
+                        <!-- Tests and test classes can be enabled for concurrent execution using @Execution(ExecutionMode.CONCURRENT). -->
+                        <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
+                        <!-- Tests are by default executed by a single thread; parallel execution is opt-in. -->
+                        <junit.jupiter.execution.parallel.mode.default>same_thread</junit.jupiter.execution.parallel.mode.default>
+                        <!-- Tests suites are by default executed by a single thread; parallel execution is opt-in. -->
+                        <junit.jupiter.execution.parallel.mode.classes.default>same_thread</junit.jupiter.execution.parallel.mode.classes.default>
+                        <!-- automatically adjust parallelism based on available cpu/processor cores-->
+                        <junit.jupiter.execution.parallel.config.strategy>dynamic</junit.jupiter.execution.parallel.config.strategy>
                     </systemPropertyVariables>
+                    <argLine>${flink.surefire.baseArgLine} ${extraJavaTestArgs}</argLine>
                     <!-- By removing all default exclusions the nested classes get executed too -->
                     <excludes>
                         <exclude/>
@@ -583,7 +595,7 @@ under the License.
                                 <include>${test.unit.pattern}</include>
                             </includes>
                             <forkCount>${flink.forkCountUnitTest}</forkCount>
-                            <argLine>-Xms256m -Xmx${flink.XmxUnitTest} -Dmvn.forkNumber=${surefire.forkNumber} -XX:+UseG1GC ${extraJavaTestArgs}</argLine>
+                            <argLine>${flink.surefire.baseArgLine} ${extraJavaTestArgs} -Xmx${flink.XmxUnitTest}</argLine>
                         </configuration>
                     </execution>
                     <!--execute all the integration tests-->
@@ -602,7 +614,7 @@ under the License.
                             </excludes>
                             <reuseForks>false</reuseForks>
                             <forkCount>${flink.forkCountITCase}</forkCount>
-                            <argLine>-Xms256m -Xmx${flink.XmxITCase} -Dmvn.forkNumber=${surefire.forkNumber} -XX:+UseG1GC ${extraJavaTestArgs}</argLine>
+                            <argLine>${flink.surefire.baseArgLine} ${extraJavaTestArgs} -Xmx${flink.XmxITCase}</argLine>
                         </configuration>
                     </execution>
                 </executions>
