@@ -37,25 +37,45 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Set up JDK ${{ env.JDK_VERSION }}
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'adopt'
+
       - name: Build Flink
-        run:  mvn -T 1C -B clean install -DskipTests
-      - name: Test Flink
+        run: |
+          for suffix in 1.15 1.16 1.17 1.18 1.19 1.20 common; do
+            COMPILE_MODULES+="org.apache.paimon:paimon-flink-${suffix}," 
+          done
+          echo "Start compiling modules: $test_modules"
+          mvn -T 2C -B clean install -DskipTests -am -pl $(IFS=, ; echo "${COMPILE_MODULES[@]}")
+
+      - name: Test Flink (Parallel)
         timeout-minutes: 60
         run: |
           . .github/workflows/utils.sh
           jvm_timezone=$(random_timezone)
           echo "JVM timezone is set to $jvm_timezone"
-          test_modules=""
+
           for suffix in 1.15 1.16 1.17 1.18 1.19 1.20 common; do
-            test_modules+="org.apache.paimon:paimon-flink-${suffix}," 
+            test_module="org.apache.paimon:paimon-flink-${suffix}"
+            echo "Start testing module: $test_module"
+            TEST_MODULES+="org.apache.paimon:paimon-flink-${suffix}," 
+            mvn -T 2C -B test -pl "${TEST_MODULES}" -Duser.timezone=$jvm_timezone &
           done
-          test_modules="${test_modules%,}"
-          mvn -T 1C -B clean install -pl "${test_modules}" -Duser.timezone=$jvm_timezone
+
+          wait
+          echo "All test modules completed"
         env:
-          MAVEN_OPTS: -Xmx4096m
+          MAVEN_OPTS: -Xmx4096m -XX:+UseG1GC -XX:CICompilerCount=2
