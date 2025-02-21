@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        flink_version: ['common', '1.15', '1.16', '1.17', '1.18', '1.19', '1.20']
+        flink_version: ['common', 'cdc', '1.15', '1.16', '1.17', '1.18', '1.19', '1.20']
 
     steps:
       - name: Checkout code
@@ -50,19 +50,11 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
       - name: Build Flink
         run: |
-          COMPILE_MODULE="org.apache.paimon:paimon-flink-${{ matrix.flink_version }}" 
+          COMPILE_MODULE="org.apache.paimon:paimon-flink-${{ matrix.flink_version }}"
           echo "Start compiling modules: $COMPILE_MODULE"
-          mvn -T 2C -B clean install -DskipTests -am -pl "${COMPILE_MODULE}"
+          mvn -T 2C -B clean install -DskipTests -pl "${COMPILE_MODULE}" -am
 
       - name: Test Flink
         run: |
@@ -71,7 +63,7 @@ jobs:
           echo "JVM timezone is set to $jvm_timezone"
           TEST_MODULE="org.apache.paimon:paimon-flink-${{ matrix.flink_version }}" 
           echo "Start testing module: $TEST_MODULE"
-          mvn -T 1C -B test verify -pl "${TEST_MODULE}" -Duser.timezone=$jvm_timezone
+          mvn -T 2C -B test verify -pl "${TEST_MODULE}" -Duser.timezone=$jvm_timezone
           echo "All modules tested"
         env:
           MAVEN_OPTS: -Xmx4096m -XX:+UseG1GC -XX:CICompilerCount=2
