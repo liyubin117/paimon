@@ -37,29 +37,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JDK_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_VERSION }}
+          distribution: 'adopt'
 
       - name: Cache Maven dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Set up JDK ${{ env.JDK_VERSION }}
-        uses: actions/setup-java@v3
-        with:
-          java-version: ${{ env.JDK_VERSION }}
-          distribution: 'adopt'
-
       - name: Build Flink
         run: |
           for suffix in 1.15 1.16 1.17 1.18 1.19 1.20 common; do
             COMPILE_MODULES+="org.apache.paimon:paimon-flink-${suffix}," 
           done
-          echo "Start compiling modules: $test_modules"
-          mvn -T 2C -B clean install -DskipTests -am -pl $(IFS=, ; echo "${COMPILE_MODULES[@]}")
+          COMPILE_MODULES="${COMPILE_MODULES%,}"
+          echo "Start compiling modules: $COMPILE_MODULES"
+          mvn -T 2C -B clean install -DskipTests -am -pl "${TEST_MODULES}"
 
       - name: Test Flink (Parallel)
         timeout-minutes: 60
@@ -69,10 +70,9 @@ jobs:
           echo "JVM timezone is set to $jvm_timezone"
 
           for suffix in 1.15 1.16 1.17 1.18 1.19 1.20 common; do
-            test_module="org.apache.paimon:paimon-flink-${suffix}"
-            echo "Start testing module: $test_module"
             TEST_MODULES+="org.apache.paimon:paimon-flink-${suffix}," 
-            mvn -T 2C -B test -pl "${TEST_MODULES}" -Duser.timezone=$jvm_timezone &
+            echo "Start testing module: $TEST_MODULES"
+            mvn -T 1C -B test -pl "${TEST_MODULES}" -Duser.timezone=$jvm_timezone &
           done
 
           wait
