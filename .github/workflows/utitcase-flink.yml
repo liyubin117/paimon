@@ -60,10 +60,7 @@ jobs:
 
       - name: Build Flink
         run: |
-          for suffix in 1.15 1.16 1.17 1.18 1.19 1.20 common; do
-            COMPILE_MODULES+="org.apache.paimon:paimon-flink-${suffix}," 
-          done
-          COMPILE_MODULES="${COMPILE_MODULES%,}"
+          COMPILE_MODULES="org.apache.paimon:paimon-flink-${matrix.flink_version}" 
           echo "Start compiling modules: $COMPILE_MODULES"
           mvn -T 2C -B clean install -DskipTests -am -pl "${TEST_MODULES}"
 
