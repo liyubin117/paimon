@@ -60,4 +60,4 @@ jobs:
           test_modules="${test_modules%,}"
           mvn -T 2C -B test -pl "${test_modules}" -Duser.timezone=$jvm_timezone -Pspark4
         env:
-          MAVEN_OPTS: -Xmx2048m
+          MAVEN_OPTS: -Xmx4096m

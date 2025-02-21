@@ -60,4 +60,4 @@ jobs:
           echo "JVM timezone is set to $jvm_timezone"
           mvn -T 2C -B clean install -pl 'org.apache.paimon:paimon-flink-cdc' -Duser.timezone=$jvm_timezone
         env:
-          MAVEN_OPTS: -Xmx2048m
+          MAVEN_OPTS: -Xmx4096m

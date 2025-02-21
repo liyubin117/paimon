@@ -61,4 +61,4 @@ jobs:
           echo "JVM timezone is set to $jvm_timezone"
           mvn -T 2C -B test -pl paimon-e2e-tests -Duser.timezone=$jvm_timezone -Pflink-1.19
         env:
-          MAVEN_OPTS: -Xmx2048m
+          MAVEN_OPTS: -Xmx4096m
