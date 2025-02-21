@@ -32,13 +32,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compile_and_test:
+  build_test:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: true
       matrix:
-        flink_version: [ 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, common ]
+        flink_version: [common, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20]
 
     steps:
       - name: Checkout code
