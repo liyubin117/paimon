@@ -37,14 +37,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Set up JDK ${{ env.JDK_VERSION }}
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'adopt'
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
       - name: Build Flink 1.19
-        run: mvn -T 1C -B clean install -DskipTests
+        run: mvn -T 2C -B clean install -DskipTests
       - name: Test Flink 1.19
         timeout-minutes: 60
         run: |
@@ -52,6 +59,6 @@ jobs:
           . .github/workflows/utils.sh
           jvm_timezone=$(random_timezone)
           echo "JVM timezone is set to $jvm_timezone"
-          mvn -T 1C -B test -pl paimon-e2e-tests -Duser.timezone=$jvm_timezone -Pflink-1.19
+          mvn -T 2C -B test -pl paimon-e2e-tests -Duser.timezone=$jvm_timezone -Pflink-1.19
         env:
-          MAVEN_OPTS: -Xmx4096m
+          MAVEN_OPTS: -Xmx2048m
