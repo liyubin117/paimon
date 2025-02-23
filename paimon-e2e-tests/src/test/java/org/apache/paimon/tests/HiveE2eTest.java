@@ -18,7 +18,6 @@
 
 package org.apache.paimon.tests;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +42,6 @@ public class HiveE2eTest extends E2eReaderTestBase {
         super(false, true, false);
     }
 
-    @BeforeEach
     @Override
     public void before() throws Exception {
         super.before();

@@ -18,7 +18,6 @@
 
 package org.apache.paimon.tests;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -35,7 +34,6 @@ public class LogStoreE2eTest extends E2eTestBase {
     }
 
     @Override
-    @BeforeEach
     public void before() throws Exception {
         super.before();
         topicName = "ts-topic-" + UUID.randomUUID();

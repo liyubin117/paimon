@@ -25,8 +25,6 @@ import org.apache.paimon.utils.StringUtils;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.ImmutableMap;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +69,7 @@ public abstract class MySqlCdcE2eTestBase extends E2eTestBase {
         this.mySqlVersion = mySqlVersion;
     }
 
-    @BeforeEach
+    @Override
     public void before() throws Exception {
         super.before();
         mySqlContainer = createMySqlContainer(mySqlVersion);
@@ -102,7 +100,7 @@ public abstract class MySqlCdcE2eTestBase extends E2eTestBase {
                         .withNetworkAliases("mysql-1");
     }
 
-    @AfterEach
+    @Override
     public void after() {
         mySqlContainer.stop();
         super.after();
