@@ -18,6 +18,7 @@
 
 package org.apache.paimon.tests;
 
+import org.junit.Before;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -33,6 +34,7 @@ public class LogStoreE2eTest extends E2eTestBase {
         super(true, false);
     }
 
+    @Before
     @Override
     public void before() throws Exception {
         super.before();
