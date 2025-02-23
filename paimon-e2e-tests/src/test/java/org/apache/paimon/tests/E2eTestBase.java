@@ -18,6 +18,8 @@
 
 package org.apache.paimon.tests;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
@@ -85,7 +87,7 @@ public abstract class E2eTestBase {
     protected ComposeContainer environment;
     protected ContainerState jobManager;
 
-    @BeforeEach
+    @Before
     public void before() throws Exception {
         List<String> services = new ArrayList<>();
         services.add("jobmanager");
@@ -157,7 +159,7 @@ public abstract class E2eTestBase {
         return Wait.forLogMessage(regex, times).withStartupTimeout(Duration.ofSeconds(180));
     }
 
-    @AfterEach
+    @After
     public void after() {
         if (environment != null) {
             environment.stop();
