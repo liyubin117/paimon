@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.UUID;
 
@@ -208,7 +209,8 @@ public class PaimonEmbeddedHiveServerContext implements HiveServerContext {
 
     private Path newFolder(Path basedir, String folder) {
         try {
-            Path newFolder = Files.createTempDirectory(basedir, folder);
+            Path subDirectoryPath = Paths.get(basedir.toString(), folder);
+            Path newFolder = Files.createDirectory(subDirectoryPath);
             FileUtil.setPermission(newFolder.toFile(), FsPermission.getDirDefault());
             return newFolder;
         } catch (IOException e) {
