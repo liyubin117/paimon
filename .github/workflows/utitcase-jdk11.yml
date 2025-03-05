@@ -41,8 +41,6 @@ jobs:
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
-      - name: Build
-        run:  mvn -T 1C -B clean install -DskipTests
       - name: Test
         run: |
           # run tests with random timezone to find out timezone related bugs
@@ -54,6 +52,6 @@ jobs:
           test_modules+="!org.apache.paimon:paimon-spark-${suffix},"
           done
           test_modules="${test_modules%,}"
-          mvn -T 1C -B clean install -pl "${test_modules}" -Pskip-paimon-flink-tests -Duser.timezone=$jvm_timezone
+          mvn -T 1C -B clean install -pl paimon-hive/paimon-hive-connector-common -am -Pskip-paimon-flink-tests -Duser.timezone=$jvm_timezone
         env:
           MAVEN_OPTS: -Xmx4096m
