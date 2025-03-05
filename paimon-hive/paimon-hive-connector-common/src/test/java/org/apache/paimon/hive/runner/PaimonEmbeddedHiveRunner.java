@@ -93,7 +93,8 @@ public class PaimonEmbeddedHiveRunner extends BlockJUnit4ClassRunner {
                     @Override
                     protected void before() throws Throwable {
                         PaimonEmbeddedHiveServerContext paimonEmbeddedHiveServerContext =
-                                new PaimonEmbeddedHiveServerContext(temporaryFolder, config);
+                                new PaimonEmbeddedHiveServerContext(
+                                        temporaryFolder.getRoot().toPath(), config);
                         innerContainer =
                                 createHiveServerContainer(
                                         getTestClass().getJavaClass(),
