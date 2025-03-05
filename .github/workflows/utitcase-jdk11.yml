@@ -53,7 +53,7 @@ jobs:
           for suffix in 3.5 3.4 3.3 3.2 ut; do
           test_modules+="!org.apache.paimon:paimon-spark-${suffix},"
           done
-          for suffix in 2.1 2.1-cdh-6.3 2.2 ut; do
+          for suffix in 2.1 2.1-cdh-6.3 2.2; do
           test_modules+="!org.apache.paimon:paimon-hive-connector-${suffix},"
           done
           test_modules="${test_modules%,}"
