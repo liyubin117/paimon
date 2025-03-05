@@ -46,7 +46,7 @@ under the License.
 
     <properties>
         <hive.version>2.3.10</hive.version>
-        <tez.version>0.10.4</tez.version>
+        <tez.version>0.10.0</tez.version>
         <hiverunner.version>5.5.0</hiverunner.version>
         <reflections.version>0.9.8</reflections.version>
         <aws.version>1.12.319</aws.version>
