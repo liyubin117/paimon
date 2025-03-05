@@ -18,13 +18,13 @@
 
 name: UTCase and ITCase Others on JDK 11
 
-on:
-  issue_comment:
-    types: [created, edited, deleted]
 
-  # daily run
-  schedule:
-    - cron: "0 0 * * *"
+on:
+  push:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 env:
   JDK_VERSION: 11
@@ -55,6 +55,9 @@ jobs:
           test_modules="!paimon-e2e-tests,!org.apache.paimon:paimon-hive-connector-3.1,"
           for suffix in 3.5 3.4 3.3 3.2 ut; do
           test_modules+="!org.apache.paimon:paimon-spark-${suffix},"
+          done
+          for suffix in 2.1 2.1-cdh-6.3 2.2 ut; do
+          test_modules+="!org.apache.paimon:paimon-hive-connector-${suffix},"
           done
           test_modules="${test_modules%,}"
           mvn -T 1C -B clean install -pl "${test_modules}" -Pskip-paimon-flink-tests -Duser.timezone=$jvm_timezone
