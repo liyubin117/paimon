@@ -18,22 +18,19 @@
 
 name: UTCase and ITCase Others on JDK 11
 
-on:
-  issue_comment:
-    types: [created, edited, deleted]
 
-  # daily run
-  schedule:
-    - cron: "0 0 * * *"
+on:
+  push:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 env:
   JDK_VERSION: 11
 
 jobs:
   build:
-    if: |
-      github.event_name == 'schedule' ||
-      (contains(github.event.comment.html_url, '/pull/') && contains(github.event.comment.body, '/jdk11'))
     runs-on: ubuntu-latest
 
     steps:
@@ -44,8 +41,6 @@ jobs:
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
-      - name: Build
-        run:  mvn -T 1C -B clean install -DskipTests
       - name: Test
         run: |
           # run tests with random timezone to find out timezone related bugs
