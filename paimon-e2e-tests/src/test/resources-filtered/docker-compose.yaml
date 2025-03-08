@@ -25,7 +25,7 @@ services:
   # ----------------------------------------
 
   jobmanager:
-    image: apache/flink:${test.flink.version}-java8
+    image: apache/flink:${test.flink.version}-jdk11
     volumes:
       - testdata:/test-data
       - /tmp/paimon-e2e-tests-jars:/jars
@@ -49,7 +49,7 @@ services:
       - "8081"
 
   taskmanager:
-    image: apache/flink:${test.flink.version}-java8
+    image: apache/flink:${test.flink.version}-jdk11
     volumes:
       - testdata:/test-data
       - /tmp/paimon-e2e-tests-jars:/jars
@@ -109,7 +109,7 @@ services:
   # ----------------------------------------
 
   namenode:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-jdk11
     volumes:
       - testdata:/test-data
       - namenode:/hadoop/dfs/name
@@ -125,7 +125,7 @@ services:
       - "50070"
 
   datanode:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-jdk11
     volumes:
       - testdata:/test-data
       - datanode:/hadoop/dfs/data
