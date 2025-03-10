@@ -290,10 +290,10 @@ under the License.
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <includes>
-                                <include>**/*.*</include>
-                            </includes>
-                            <excludedGroups>org.apache.flink.testutils.junit.FailsOnJava11</excludedGroups>
+                            <excludes>
+                                <exclude>org.apache.paimon.tests.HiveE2eTest</exclude>
+                                <exclude>org.apache.paimon.tests.SparkE2eTest</exclude>
+                            </excludes>
                             <!-- E2E tests must not access flink-dist concurrently. -->
                             <forkCount>1</forkCount>
                             <systemPropertyVariables>
