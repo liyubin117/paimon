@@ -35,7 +35,7 @@ import java.util.UUID;
  * <p>NOTE: This test runs a complete Hadoop cluster in Docker, which requires a lot of memory. If
  * you're running this test locally, make sure that the memory limit of your Docker is at least 8GB.
  */
-public class HiveE2eTest extends E2eReaderTestBase {
+public class HiveE2eTest extends E2eReaderTestBase implements FailsOnJava11 {
 
     private static final Logger LOG = LoggerFactory.getLogger(HiveE2eTest.class);
 

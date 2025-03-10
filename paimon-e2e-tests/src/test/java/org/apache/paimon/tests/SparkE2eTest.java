@@ -29,7 +29,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /** Tests for reading paimon from Spark3. */
-public class SparkE2eTest extends E2eReaderTestBase {
+public class SparkE2eTest extends E2eReaderTestBase implements FailsOnJava11 {
 
     private static final Logger LOG = LoggerFactory.getLogger(SparkE2eTest.class);
 
