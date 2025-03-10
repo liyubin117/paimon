@@ -187,7 +187,7 @@ services:
   # ----------------------------------------
 
   spark-master:
-    image: bde2020/spark-master:${test.spark.version}-hadoop3.3-java11
+    image: bde2020/spark-master:${test.spark.version}-hadoop3.3
     volumes:
       - testdata:/test-data
       - /tmp/paimon-e2e-tests-jars:/jars
@@ -199,7 +199,7 @@ services:
       - INIT_DAEMON_STEP=setup_spark
 
   spark-worker:
-    image: bde2020/spark-worker:${test.spark.version}-hadoop3.3-java11
+    image: bde2020/spark-worker:${test.spark.version}-hadoop3.3
     depends_on:
       - spark-master
     volumes:

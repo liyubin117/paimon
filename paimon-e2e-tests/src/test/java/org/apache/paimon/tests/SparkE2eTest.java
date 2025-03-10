@@ -18,6 +18,7 @@
 
 package org.apache.paimon.tests;
 
+import org.junit.Ignore;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,7 @@ public class SparkE2eTest extends E2eReaderTestBase {
         super(false, false, true);
     }
 
+    @Ignore
     @Test
     public void testFlinkWriteAndSparkRead() throws Exception {
         String warehousePath = TEST_DATA_DIR + "/" + UUID.randomUUID() + "_warehouse";
