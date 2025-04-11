@@ -149,7 +149,7 @@ public class AppendOnlySingleTableCompactionWorkerOperatorTest extends TableTest
         }
 
         // wait compaction
-        Thread.sleep(500);
+        Thread.sleep(1_000);
 
         LocalFileIO localFileIO = LocalFileIO.create();
         DataFilePathFactory dataFilePathFactory =
