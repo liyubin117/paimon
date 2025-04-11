@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
+import org.apache.parquet.bytes.DirectByteBufferAllocator;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.DataPage;
 import org.apache.parquet.column.page.DataPageV1;
@@ -798,11 +799,11 @@ public class ParquetFileReader implements Closeable {
         if (blockIndex < 0 || blockIndex >= blocks.size()) {
             return null;
         }
-        return new DictionaryPageReader(this, blocks.get(blockIndex), null);
+        return new DictionaryPageReader(this, blocks.get(blockIndex), options.getAllocator());
     }
 
     public DictionaryPageReader getDictionaryReader(BlockMetaData block) {
-        return new DictionaryPageReader(this, block, null);
+        return new DictionaryPageReader(this, block, options.getAllocator());
     }
 
     /**
