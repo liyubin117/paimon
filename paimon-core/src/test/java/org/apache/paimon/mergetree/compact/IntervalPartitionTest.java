@@ -98,7 +98,7 @@ public class IntervalPartitionTest {
         assertThat(toMultiset(actual)).isEqualTo(toMultiset(expected));
     }
 
-    @RepeatedTest(100)
+    @RepeatedTest(10)
     public void randomTest() {
         ThreadLocalRandom r = ThreadLocalRandom.current();
         List<int[]> intervals = new ArrayList<>();

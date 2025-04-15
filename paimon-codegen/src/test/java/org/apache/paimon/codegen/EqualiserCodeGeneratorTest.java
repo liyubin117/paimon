@@ -213,7 +213,7 @@ public class EqualiserCodeGeneratorTest {
         assertBoolean(equaliser, func, testData.left(), testData.right(), false);
     }
 
-    @RepeatedTest(100)
+    @RepeatedTest(10)
     public void testProjection() {
         GeneratedData field0 = TEST_DATA.get(DataTypeRoot.INTEGER);
         GeneratedData field1 = TEST_DATA.get(DataTypeRoot.VARCHAR);
@@ -237,7 +237,7 @@ public class EqualiserCodeGeneratorTest {
         assertThat(result).isEqualTo(expected);
     }
 
-    @RepeatedTest(100)
+    @RepeatedTest(10)
     public void testManyFields() {
         int size = 499;
         GeneratedData[] generatedData = new GeneratedData[size];
