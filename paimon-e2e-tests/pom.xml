@@ -349,14 +349,6 @@ under the License.
             </properties>
         </profile>
 
-        <profile>
-            <id>java11</id>
-            <activation>
-                <jdk>[11,)</jdk>
-            </activation>
-            <properties>
-                <test.java.version>java11</test.java.version>
-            </properties>
-        </profile>
+
     </profiles>
 </project>
