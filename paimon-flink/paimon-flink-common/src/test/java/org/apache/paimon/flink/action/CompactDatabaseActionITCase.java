@@ -1048,13 +1048,12 @@ public class CompactDatabaseActionITCase extends CompactActionITCaseBase {
         StreamExecutionEnvironment env =
                 streamExecutionEnvironmentBuilder().streamingMode().build();
         action.withStreamExecutionEnvironment(env).build();
-        JobClient jobClient = env.executeAsync();
+        env.executeAsync();
 
         waitUtil(
                 () -> snapshotManager.latestSnapshotId() == 11L,
                 Duration.ofSeconds(240),
                 Duration.ofMillis(500));
-        jobClient.cancel();
 
         assertThat(snapshotManager.latestSnapshot().commitKind())
                 .isEqualTo(Snapshot.CommitKind.COMPACT);
