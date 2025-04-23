@@ -460,6 +460,9 @@ under the License.
             </activation>
             <properties>
                 <test.java.version>java11</test.java.version>
+                <target.java.version>11</target.java.version>
+                <scala.binary.version>2.13</scala.binary.version>
+                <scala.version>${scala213.version}</scala.version>
             </properties>
             <build>
                 <plugins>
