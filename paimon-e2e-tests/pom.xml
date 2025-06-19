@@ -91,14 +91,6 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-flink-cdc</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-            <type>test-jar</type>
-        </dependency>
-
         <!-- testcontainers -->
 
         <dependency>
@@ -347,6 +339,25 @@ under the License.
                 <flink.sql.connector.hive>flink-sql-connector-hive-2.3.6_${scala.binary.version}</flink.sql.connector.hive>
                 <test.flink.connector.hive.version>${test.flink.version}</test.flink.connector.hive.version>
             </properties>
+        </profile>
+
+        <profile>
+            <id>flink1</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.paimon</groupId>
+                    <artifactId>paimon-flink-cdc</artifactId>
+                    <version>${project.version}</version>
+                    <scope>test</scope>
+                    <type>test-jar</type>
+                </dependency>
+            </dependencies>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>flink1</name>
+                </property>
+            </activation>
         </profile>
 
         <profile>
