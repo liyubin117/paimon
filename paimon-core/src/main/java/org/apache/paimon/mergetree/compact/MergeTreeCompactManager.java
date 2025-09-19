@@ -49,7 +49,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-/** Compact manager for {@link KeyValueFileStore}. */
+/** Compact manager for {@link KeyValueFileStore}.
+ * 负责管理 LSM 树的结构和触发 Compaction
+ * */
 public class MergeTreeCompactManager extends CompactFutureManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeTreeCompactManager.class);
@@ -114,7 +116,7 @@ public class MergeTreeCompactManager extends CompactFutureManager {
 
     @Override
     public void addNewFile(DataFileMeta file) {
-        levels.addLevel0File(file);
+        levels.addLevel0File(file); // compactManager 得知一个新的 L0 层文件（dataMeta）诞生了
         MetricUtils.safeCall(this::reportMetrics, LOG);
     }
 
@@ -123,6 +125,9 @@ public class MergeTreeCompactManager extends CompactFutureManager {
         return levels.allFiles();
     }
 
+    /**
+     * 触发合并
+     * */
     @Override
     public void triggerCompaction(boolean fullCompaction) {
         Optional<CompactUnit> optionalUnit;
