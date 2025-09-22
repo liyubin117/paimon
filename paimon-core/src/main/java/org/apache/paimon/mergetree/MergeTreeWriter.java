@@ -289,6 +289,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         // files were successfully committed, but failed to restart during the compaction phase,
         // which may result in an increasing number of Level 0 files. This wait can avoid this
         // situation.
+        // 当SortedRun的数量>num-sorted-run.stop-trigger，prepareCommit阶段刷写新文件前先要等待compaction防止文件数量过多
         if (compactManager.shouldWaitForPreparingCheckpoint()) {
             waitCompaction = true;
         }

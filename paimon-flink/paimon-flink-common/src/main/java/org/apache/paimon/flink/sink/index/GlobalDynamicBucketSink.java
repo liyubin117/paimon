@@ -55,7 +55,7 @@ import static org.apache.paimon.flink.FlinkConnectorOptions.SINK_WRITER_COORDINA
 import static org.apache.paimon.flink.sink.FlinkStreamPartitioner.partition;
 import static org.apache.paimon.flink.utils.ManagedMemoryUtils.declareManagedMemory;
 
-/** Sink for global dynamic bucket table. */
+/** Sink for global dynamic bucket table. 动态分桶的关键类*/
 public class GlobalDynamicBucketSink extends FlinkWriteSink<Tuple2<InternalRow, Integer>> {
 
     private static final long serialVersionUID = 1L;
@@ -91,6 +91,7 @@ public class GlobalDynamicBucketSink extends FlinkWriteSink<Tuple2<InternalRow, 
         // input -- bootstrap -- shuffle by key hash --> bucket-assigner -- shuffle by bucket -->
         // writer --> committer
 
+        // 通过 IndexBootstrapOperator 为每条数据加载其当前所属的分区和 bucket 信息
         SingleOutputStreamOperator<Tuple2<KeyPartOrRow, InternalRow>> bootstraped =
                 input.transform(
                                 "INDEX_BOOTSTRAP",
@@ -101,7 +102,7 @@ public class GlobalDynamicBucketSink extends FlinkWriteSink<Tuple2<InternalRow, 
                                         new IndexBootstrap(table), r -> r))
                         .setParallelism(input.getParallelism());
 
-        // 1. shuffle by key hash
+        // 1. shuffle by key hash 数据不是直接写入，而是根据主键的哈希值进行一次 shuffle。这确保了相同主键的数据会被发送到同一个 bucket-assigner 算子实例
         Integer assignerParallelism =
                 MathUtils.max(
                         options.dynamicBucketInitialBuckets(),
@@ -115,7 +116,12 @@ public class GlobalDynamicBucketSink extends FlinkWriteSink<Tuple2<InternalRow, 
         DataStream<Tuple2<KeyPartOrRow, InternalRow>> partitionByKeyHash =
                 partition(bootstraped, channelComputer, assignerParallelism);
 
-        // 2. bucket-assigner
+        /**
+         * 2. bucket-assigner 核心
+         * GlobalIndexAssignerOperator 是一个有状态的算子，它内部维护了一个全局的索引（通常基于 RocksDB），记录了每个主键当前被分配在哪个 bucket。当新数据到来时，它会查询这个索引：
+         * 如果主键已存在，就将数据路由到已有的 bucket。
+         * 如果主键是新的，它会根据负载情况（比如每个 bucket 的大小）为其分配一个新的 bucket
+         */
         TupleTypeInfo<Tuple2<InternalRow, Integer>> rowWithBucketType =
                 new TupleTypeInfo<>(input.getType(), BasicTypeInfo.INT_TYPE_INFO);
         SingleOutputStreamOperator<Tuple2<InternalRow, Integer>> bucketAssigned =
@@ -130,12 +136,12 @@ public class GlobalDynamicBucketSink extends FlinkWriteSink<Tuple2<InternalRow, 
         declareManagedMemory(
                 bucketAssigned, options.toConfiguration().get(SINK_CROSS_PARTITION_MANAGED_MEMORY));
 
-        // 3. shuffle by bucket
+        // 3. shuffle by bucket：assigner 算子为每条数据打上 bucket 标签后，再进行一次 shuffle，将数据发送到负责写入对应 bucket 的 writer 算子。
 
         DataStream<Tuple2<InternalRow, Integer>> partitionByBucket =
                 partition(bucketAssigned, new RowWithBucketChannelComputer(schema), parallelism);
 
-        // 4. writer and committer
+        // 4. writer and committer：最后由 DynamicBucketRowWriteOperator 将数据写入 Paimon 表的对应 bucket 文件中
         return sinkFrom(partitionByBucket, createCommitUser(options.toConfiguration()));
     }
 }

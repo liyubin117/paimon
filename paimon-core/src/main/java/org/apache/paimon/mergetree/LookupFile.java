@@ -43,7 +43,9 @@ import static org.apache.paimon.mergetree.LookupUtils.fileKibiBytes;
 import static org.apache.paimon.utils.InternalRowPartitionComputer.partToSimpleString;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
-/** Lookup file for cache remote file to local. */
+/** Lookup file for cache remote file to local.
+ * 本地文件缓存 (Local File Cache): Paimon 会将远程存储（如 HDFS/S3）上的数据文件拉取到本地磁盘进行缓存，避免每次查询都通过网络读取。这个缓存由 Caffeine 实现，具备 LRU 和超时淘汰策略。
+ * */
 public class LookupFile {
 
     private static final Logger LOG = LoggerFactory.getLogger(LookupFile.class);

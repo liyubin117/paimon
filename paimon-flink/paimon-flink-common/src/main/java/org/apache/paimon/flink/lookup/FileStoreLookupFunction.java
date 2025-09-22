@@ -186,6 +186,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
         LOG.info("Creating lookup table for {}.", table.name());
         if (options.get(LOOKUP_CACHE_MODE) == LookupCacheMode.AUTO
                 && new HashSet<>(table.primaryKeys()).equals(new HashSet<>(joinKeys))) {
+            // 当表目录下有service/service-primary-key-lookup目录，说明启用了query service
             if (isRemoteServiceAvailable(table)) {
                 this.lookupTable =
                         PrimaryKeyPartialLookupTable.createRemoteTable(table, projection, joinKeys);
@@ -193,6 +194,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
                         "Remote service is available. Created PrimaryKeyPartialLookupTable with remote service.");
             } else {
                 try {
+                    // 当query service服务未启动时，优先启用partial cache
                     this.lookupTable =
                             PrimaryKeyPartialLookupTable.createLocalTable(
                                     table, projection, path, joinKeys, getRequireCachedBucketIds());

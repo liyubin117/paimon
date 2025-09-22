@@ -49,6 +49,9 @@ import static org.rocksdb.InfoLogLevel.INFO_LEVEL;
 /** Options for rocksdb. Copied from flink {@code RocksDBConfigurableOptions}. */
 public class RocksDBOptions {
 
+    /**
+     * 用于控制缓存行数
+     */
     public static final ConfigOption<Long> LOOKUP_CACHE_ROWS =
             key("lookup.cache-rows")
                     .longType()

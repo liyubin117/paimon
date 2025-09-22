@@ -72,7 +72,9 @@ import static org.apache.paimon.flink.FlinkConnectorOptions.LOOKUP_REFRESH_ASYNC
 import static org.apache.paimon.flink.FlinkConnectorOptions.LOOKUP_REFRESH_ASYNC_PENDING_SNAPSHOT_COUNT;
 import static org.apache.paimon.flink.FlinkConnectorOptions.LookupCacheMode.MEMORY;
 
-/** Lookup table of full cache. */
+/** Lookup table of full cache.
+ * 对于已经拉取到本地的数据，Paimon 会将其加载到内嵌的 RocksDB 实例中，构建 Key-Value 索引。这样，后续的 Lookup 操作就变成了对本地 RocksDB 的高效点查，而不是对原始文件的扫描。FullCacheLookupTable 和 NoPrimaryKeyLookupTable 等类都利用了 RocksDB 的能力
+ * */
 public abstract class FullCacheLookupTable implements LookupTable {
 
     private static final Logger LOG = LoggerFactory.getLogger(FullCacheLookupTable.class);
@@ -224,6 +226,7 @@ public abstract class FullCacheLookupTable implements LookupTable {
             return;
         }
 
+        // 当最新快照比上次刷新的快照多lookup.refresh.async.pending-snapshot-count（默认5个）时，同步刷新一次
         Long latestSnapshotId = table.snapshotManager().latestSnapshotId();
         Long nextSnapshotId = reader.nextSnapshotId();
         if (latestSnapshotId != null
@@ -243,6 +246,7 @@ public abstract class FullCacheLookupTable implements LookupTable {
         } else {
             Future<?> currentFuture = null;
             try {
+                // 否则异步提交到lookup-refresh线程池
                 currentFuture =
                         refreshExecutor.submit(
                                 () -> {

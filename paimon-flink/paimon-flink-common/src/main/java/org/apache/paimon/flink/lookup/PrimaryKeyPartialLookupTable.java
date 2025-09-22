@@ -56,7 +56,10 @@ import java.util.Set;
 import static org.apache.paimon.table.BucketMode.POSTPONE_BUCKET;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
-/** Lookup table for primary key which supports to read the LSM tree directly. */
+/** Lookup table for primary key which supports to read the LSM tree directly.
+ * 根据上游流数据 Join Key 的值，计算出这个 Key 对应 Paimon 表中的哪个 Bucket，然后只加载该 Bucket 的数据
+ * 这样，每个 Flink 的 Lookup 并发实例就不再需要加载维表的全量数据，而只需要负责一部分 Bucket 的数据，极大地降低了单个节点的内存消耗和启动时间。
+ * */
 public class PrimaryKeyPartialLookupTable implements LookupTable {
 
     private final QueryExecutorFactory executorFactory;
@@ -352,6 +355,12 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
         }
     }
 
+    /**
+     * Query service执行器
+     * 为了解决本地磁盘（尤其是 HDD）随机读性能差的问题，Paimon 借鉴了 "服务化" 的思想，推出了 Query Service
+     * 可以为一张 Paimon 表启动一个独立的、常驻的 Flink 作业作为查询服务。这个服务可以部署在拥有高性能 SSD 的专用节点上，它预先加载数据并对外提供点查服务。
+     * 当维表 Join 任务运行时，它会优先连接这个 Query Service 来获取数据，从而将 I/O 压力从计算节点转移到专用的服务节点上，实现了计算与存储的物理分离，保证了 Lookup 性能的稳定性和高效性
+     */
     static class RemoteQueryExecutor implements QueryExecutor {
 
         private final RemoteTableQuery tableQuery;

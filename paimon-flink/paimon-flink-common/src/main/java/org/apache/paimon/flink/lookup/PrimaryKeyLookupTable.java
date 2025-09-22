@@ -36,7 +36,9 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-/** A {@link LookupTable} for primary key table. */
+/** A {@link LookupTable} for primary key table.
+ * 使用 RocksDBValueState，这是一个标准的 Key-Value 存储，一个 Key 只会映射到一个 Value
+ * */
 public class PrimaryKeyLookupTable extends FullCacheLookupTable {
 
     protected final long lruCacheSize;

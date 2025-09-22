@@ -34,7 +34,12 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
-/** A {@link LookupTable} for table without primary key. */
+/** A {@link LookupTable} for table without primary key.
+ * 使用 RocksDBListState，这是一个 Key-List<Value> 的存储结构
+ * 1. 使用 Join Key 作为 RocksDB 的 Key。
+ * 2. 将所有匹配该 Join Key 的数据行组织成一个列表。
+ * 3. 将这个列表序列化后，作为 RocksDB 的 Value 进行存储
+ * */
 public class NoPrimaryKeyLookupTable extends FullCacheLookupTable {
 
     private final long lruCacheSize;
