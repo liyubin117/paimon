@@ -69,20 +69,21 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
 
     public static final String SEQUENCE_GROUP = "sequence-group";
 
-    private final InternalRow.FieldGetter[] getters;
-    private final boolean ignoreDelete;
-    private final List<WrapperWithFieldIndex<FieldsComparator>> fieldSeqComparators;
-    private final boolean fieldSequenceEnabled;
-    private final List<WrapperWithFieldIndex<FieldAggregator>> fieldAggregators;
-    private final boolean removeRecordOnDelete;
-    private final Set<Integer> sequenceGroupPartialDelete;
-    private final boolean[] nullables;
+    private final InternalRow.FieldGetter[] getters; // 用于从 InternalRow 中获取字段值
+    private final boolean ignoreDelete; // 是否忽略删除记录
+    private final List<WrapperWithFieldIndex<FieldsComparator>>
+            fieldSeqComparators; // 字段序列号比较器，用于 sequence-group
+    private final boolean fieldSequenceEnabled; // 是否启用了 sequence-group
+    private final List<WrapperWithFieldIndex<FieldAggregator>> fieldAggregators; // 字段聚合器
+    private final boolean removeRecordOnDelete; // 收到 DELETE 记录时是否删除整行
+    private final Set<Integer> sequenceGroupPartialDelete; // 收到特定sequence group的DELETE 记录时删除整行
+    private final boolean[] nullables; // 记录每个字段是否可为 null
 
-    private InternalRow currentKey;
-    private long latestSequenceNumber;
-    private GenericRow row;
-    private KeyValue reused;
-    private boolean currentDeleteRow;
+    private InternalRow currentKey; // 当前处理的主键
+    private long latestSequenceNumber; // 见过的最新序列号
+    private GenericRow row; // 合并过程中的结果行
+    private KeyValue reused; // 用于复用的 KeyValue 对象，避免重复创建
+    private boolean currentDeleteRow; // 标记当前行最终是否应被删除
     private boolean notNullColumnFilled;
 
     /**
@@ -200,7 +201,9 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
         WrapperWithFieldIndex<FieldAggregator> curAgg = aggIter.hasNext() ? aggIter.next() : null;
 
         boolean[] isEmptySequenceGroup = new boolean[getters.length];
+        Set<Integer> processedSequenceFields = new HashSet<>();
         for (int i = 0; i < getters.length; i++) {
+
             FieldsComparator seqComparator = null;
             if (curComparator != null && curComparator.fieldIndex == i) {
                 seqComparator = curComparator.getValue();
@@ -214,16 +217,18 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
             }
 
             Object accumulator = row.getField(i);
-            if (seqComparator == null) {
-                Object field = getters[i].getFieldOrNull(kv.value());
-                if (aggregator != null) {
-                    row.setField(i, aggregator.agg(accumulator, field));
-                } else if (field != null) {
-                    row.setField(i, field);
+            if (seqComparator != null) {
+                // Skip if this field has already been processed as part of a sequence group
+                if (processedSequenceFields.contains(i)) {
+                    continue;
                 }
-            } else {
+
                 if (isEmptySequenceGroup(kv, seqComparator, isEmptySequenceGroup)) {
                     // skip null sequence group
+                    // Mark all fields in this sequence group as processed
+                    for (int fieldIndex : seqComparator.compareFields()) {
+                        processedSequenceFields.add(fieldIndex);
+                    }
                     continue;
                 }
 
@@ -237,6 +242,7 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
                         for (int fieldIndex : seqComparator.compareFields()) {
                             row.setField(
                                     fieldIndex, getters[fieldIndex].getFieldOrNull(kv.value()));
+                            processedSequenceFields.add(fieldIndex);
                         }
                         continue;
                     }
@@ -244,6 +250,13 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
                             i, aggregator == null ? field : aggregator.agg(accumulator, field));
                 } else if (aggregator != null) {
                     row.setField(i, aggregator.aggReversed(accumulator, field));
+                }
+            } else {
+                Object field = getters[i].getFieldOrNull(kv.value());
+                if (aggregator != null) {
+                    row.setField(i, aggregator.agg(accumulator, field));
+                } else if (field != null) {
+                    row.setField(i, field);
                 }
             }
         }
