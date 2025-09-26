@@ -69,20 +69,20 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
 
     public static final String SEQUENCE_GROUP = "sequence-group";
 
-    private final InternalRow.FieldGetter[] getters;
-    private final boolean ignoreDelete;
-    private final List<WrapperWithFieldIndex<FieldsComparator>> fieldSeqComparators;
-    private final boolean fieldSequenceEnabled;
-    private final List<WrapperWithFieldIndex<FieldAggregator>> fieldAggregators;
-    private final boolean removeRecordOnDelete;
-    private final Set<Integer> sequenceGroupPartialDelete;
-    private final boolean[] nullables;
+    private final InternalRow.FieldGetter[] getters; // 用于从 InternalRow 中获取字段值
+    private final boolean ignoreDelete; // 是否忽略删除记录
+    private final List<WrapperWithFieldIndex<FieldsComparator>> fieldSeqComparators; // 字段序列号比较器，用于 sequence-group
+    private final boolean fieldSequenceEnabled; // 是否启用了 sequence-group
+    private final List<WrapperWithFieldIndex<FieldAggregator>> fieldAggregators; // 字段聚合器
+    private final boolean removeRecordOnDelete; // 收到 DELETE 记录时是否删除整行
+    private final Set<Integer> sequenceGroupPartialDelete; // 收到特定sequence group的DELETE 记录时删除整行
+    private final boolean[] nullables; // 记录每个字段是否可为 null
 
-    private InternalRow currentKey;
-    private long latestSequenceNumber;
-    private GenericRow row;
-    private KeyValue reused;
-    private boolean currentDeleteRow;
+    private InternalRow currentKey; // 当前处理的主键
+    private long latestSequenceNumber; // 见过的最新序列号
+    private GenericRow row; // 合并过程中的结果行
+    private KeyValue reused; // 用于复用的 KeyValue 对象，避免重复创建
+    private boolean currentDeleteRow; // 标记当前行最终是否应被删除
     private boolean notNullColumnFilled;
 
     /**
@@ -111,6 +111,9 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
         this.nullables = nullables;
     }
 
+    /**
+     * 状态类变量 (currentKey, row, latestSequenceNumber 等) 会在每次 reset() 时被重置，用于处理新的一组具有相同主键的记录
+     */
     @Override
     public void reset() {
         this.currentKey = null;
@@ -121,11 +124,15 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
         fieldAggregators.forEach(w -> w.getValue().reset());
     }
 
+    /**
+     * 定义了单条 KeyValue kv 是如何被合并到当前结果 row 中的
+     */
     @Override
     public void add(KeyValue kv) {
         // refresh key object to avoid reference overwritten
         currentKey = kv.key();
         currentDeleteRow = false;
+        // 处理 retract 消息 (RowKind 为 DELETE 或 UPDATE_BEFORE)
         if (kv.valueKind().isRetract()) {
 
             if (!notNullColumnFilled) {
@@ -135,17 +142,19 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
 
             // In 0.7- versions, the delete records might be written into data file even when
             // ignore-delete configured, so ignoreDelete still needs to be checked
-            if (ignoreDelete) {
+            if (ignoreDelete) { // ignoreDelete = true: 直接忽略这条删除记录，返回
                 return;
             }
 
             latestSequenceNumber = kv.sequenceNumber();
 
+            // fieldSequenceEnabled = true: 启用了 sequence-group。这是最复杂的逻辑，它会调用 retractWithSequenceGroup(kv)。这个方法会根据序列号比较结果，来决定是否要“撤销”某些字段的更新（通常是将其设置为 null 或调用聚合器的 retract 方法）
             if (fieldSequenceEnabled) {
                 retractWithSequenceGroup(kv);
                 return;
             }
 
+            // removeRecordOnDelete = true: 当收到 DELETE 类型的记录时，将 currentDeleteRow 标记为 true，并清空当前 row。这意味着最终这条主键对应的记录将被删除
             if (removeRecordOnDelete) {
                 if (kv.valueKind() == RowKind.DELETE) {
                     currentDeleteRow = true;
@@ -167,10 +176,11 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
             throw new IllegalArgumentException(msg);
         }
 
+        // 处理 add 消息 (RowKind 为 INSERT 或 UPDATE_AFTER)
         latestSequenceNumber = kv.sequenceNumber();
-        if (fieldSeqComparators.isEmpty()) {
+        if (fieldSeqComparators.isEmpty()) { // 简单更新 (updateNonNullFields): 如果没有配置 sequence-group (fieldSeqComparators 为空)，则执行最简单的部分列更新。遍历新纪录 kv 的所有字段，只要字段值不为 null，就用它来更新 row 中对应位置的值。
             updateNonNullFields(kv);
-        } else {
+        } else { // 带序列号的更新 (updateWithSequenceGroup): 如果配置了 sequence-group，逻辑会更复杂
             updateWithSequenceGroup(kv);
         }
         meetInsert = true;
@@ -190,6 +200,11 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
         }
     }
 
+    /**
+     * partial-update 合并引擎处理带有 sequence-group 配置时的核心逻辑。当用户在表属性中定义了 fields.<seq_field>.sequence-group = <data_field1>,<data_field2> 这样的规则时，数据合并就不再是简单的“非空值覆盖”，而是需要根据 seq_field 的值来判断是否应该更新 data_field1 和 data_field2。这解决了多流更新时可能出现的数据乱序覆盖问题。
+     * 如果该字段不属于任何 sequence-group，则行为和简单更新类似（但会考虑聚合）。
+     * 如果该字段属于某个 sequence-group，则会使用 FieldsComparator 比较新记录 kv 和当前结果 row 的序列号字段。只有当新记录的序列号 大于或等于 当前结果的序列号时，才会用新记录的字段值去更新 row 中由该 sequence-group 控制的所有字段。这保证了数据的更新顺序
+     */
     private void updateWithSequenceGroup(KeyValue kv) {
 
         Iterator<WrapperWithFieldIndex<FieldsComparator>> comparatorIter =
@@ -214,24 +229,25 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
             }
 
             Object accumulator = row.getField(i);
-            if (seqComparator == null) {
+            if (seqComparator == null) { // 字段不属于任何 sequence-group，如果在fieldSeqComparators里面找不到当前字段索引 i，就说明这个字段不受任何 sequence-group 控制
                 Object field = getters[i].getFieldOrNull(kv.value());
-                if (aggregator != null) {
+                if (aggregator != null) { // 带聚合函数: 如果为该字段配置了聚合函数（aggregator != null），例如 sum、max 等，则调用 aggregator.agg() 方法，将当前累加值 accumulator 和新值 field 进行聚合，并将结果写回 row
                     row.setField(i, aggregator.agg(accumulator, field));
-                } else if (field != null) {
+                } else if (field != null) { // 不带聚合函数: 这是最简单的情况。如果新来的字段值 field 不为 null，就直接用它覆盖 row 中的旧值。这和 updateNonNullFields 的行为是一致的
                     row.setField(i, field);
                 }
-            } else {
-                if (isEmptySequenceGroup(kv, seqComparator, isEmptySequenceGroup)) {
+            } else { // 字段属于某个 sequence-group，此类最核心且最复杂的逻辑
+                if (isEmptySequenceGroup(kv, seqComparator, isEmptySequenceGroup)) { // 空序列组检查，若新行的所有sequence-group相关字段都为空，则跳过
                     // skip null sequence group
                     continue;
                 }
 
                 Object field = getters[i].getFieldOrNull(kv.value());
-                if (seqComparator.compare(kv.value(), row) >= 0) {
+                if (seqComparator.compare(kv.value(), row) >= 0) { // 新记录 kv 的 sequence-group 是“更加新”的或者“同样新”的，此时应该用 kv 的值去更新 row
                     int index = i;
 
                     // Multiple sequence fields should be updated at once.
+                    // 如果当前字段 i 就是sequence-group字段之一，那么需要把这个 sequence-group 定义的所有sequence字段都一次性更新掉，然后用 continue 跳出本次循环。这是为了保证sequence字段之间的一致性
                     if (Arrays.stream(seqComparator.compareFields())
                             .anyMatch(seqIndex -> seqIndex == index)) {
                         for (int fieldIndex : seqComparator.compareFields()) {
@@ -240,9 +256,10 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
                         }
                         continue;
                     }
+                    // 如果当前字段 i 是被sequence-group控制的数据字段，则执行更新。如果有聚合器，则调用 aggregator.agg()；如果没有，则直接用新值 field 覆盖
                     row.setField(
                             i, aggregator == null ? field : aggregator.agg(accumulator, field));
-                } else if (aggregator != null) {
+                } else if (aggregator != null) { // kv 是一条“旧”数据。在大部分情况下，这条旧数据会被忽略。但有一个例外：如果为该字段配置了支持乱序聚合的聚合器（例如 sum），则会调用 aggregator.aggReversed()。这个方法通常和 agg() 的逻辑是一样的，它允许旧数据也能被正确地聚合进来。对于不支持乱序的聚合器（如 max），aggReversed 可能就是一个空操作
                     row.setField(i, aggregator.aggReversed(accumulator, field));
                 }
             }
