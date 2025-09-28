@@ -35,17 +35,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** The util class for merging the schemas. */
+/** The util class for merging the schemas.
+ * paimon schema evolution 的核心工具类
+ * 主要职责是比较两个 schema（通常是数据表的现有 schema 和新写入数据的 schema），并根据预设的规则将它们合并成一个新的、统一的 schema。这个过程支持添加新列、安全地转换现有列的数据类型，从而实现动态 schema 的能力
+ * 当配置 Paimon 表允许 schema 合并（例如通过 write.merge-schema=true）时，写入流程就会调用这个工具类
+ * */
 public class SchemaMergingUtils {
 
+    /**
+     * 入口方法，用于合并一个完整的表 schema 和一个新的行类型（通常来自要写入的数据）
+     * @param currentTableSchema 当前的 TableSchema 对象。它包含了字段、分区键、主键、表配置等所有元数据
+     * @param targetType 目标 RowType，即新数据的 schema
+     * @param allowExplicitCast 一个布尔标志，决定是否允许显式（可能存在精度损失）的类型转换，比如 STRING 转 INT
+     */
     public static TableSchema mergeSchemas(
             TableSchema currentTableSchema, RowType targetType, boolean allowExplicitCast) {
         RowType currentType = currentTableSchema.logicalRowType();
+        // 如果相同，则无需合并，直接返回当前的 TableSchema
         if (currentType.equals(targetType)) {
             return currentTableSchema;
         }
 
         AtomicInteger highestFieldId = new AtomicInteger(currentTableSchema.highestFieldId());
+        // 递归地合并两个 RowType
         RowType newRowType =
                 mergeSchemas(currentType, targetType, highestFieldId, allowExplicitCast);
         if (newRowType.equals(currentType)) {
@@ -53,7 +65,7 @@ public class SchemaMergingUtils {
             // current's.
             return currentTableSchema;
         }
-
+        // 如果 schema 确实发生了变化，它会创建一个新的 TableSchema 实例。这个新 schema 的 ID 会在之前所有字段 ID 最大值的基础上加 1，字段列表和 highestFieldId 会更新，而分区键、主键、表配置和注释等信息则会从旧 schema 中继承
         return new TableSchema(
                 currentTableSchema.id() + 1,
                 newRowType.getFields(),
@@ -102,6 +114,7 @@ public class SchemaMergingUtils {
             Map<String, DataField> updateFieldMap =
                     updateFields.stream()
                             .collect(Collectors.toMap(DataField::name, Function.identity()));
+            // 合并现有字段: 遍历 base (旧 schema) 的所有字段。对于每个字段，检查 update (新 schema) 中是否存在同名字段。如果存在，就递归调用 merge 方法来合并这两个字段的类型。如果不存在，则保留 base 中的原始字段
             List<DataField> updatedFields =
                     baseFields.stream()
                             .map(
@@ -130,6 +143,7 @@ public class SchemaMergingUtils {
             Map<String, DataField> baseFieldMap =
                     baseFields.stream()
                             .collect(Collectors.toMap(DataField::name, Function.identity()));
+            // 添加新字段: 遍历 update 的所有字段，找出在 base 中不存在的字段。这些就是需要新增的列。对于每个新字段，调用 assignIdForNewField 为其分配一个新的、唯一的字段 ID，然后将其添加到最终的字段列表中
             List<DataField> newFields =
                     updateFields.stream()
                             .filter(field -> !baseFieldMap.containsKey(field.name()))

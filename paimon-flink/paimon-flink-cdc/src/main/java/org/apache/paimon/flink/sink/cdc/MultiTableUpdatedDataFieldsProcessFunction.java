@@ -56,6 +56,7 @@ public class MultiTableUpdatedDataFieldsProcessFunction
 
     private final Map<Identifier, SchemaManager> schemaManagers = new HashMap<>();
 
+    // 为适应schema变化，在内存缓存一个最新的schema缓存
     private final Map<Identifier, Set<FieldIdentifier>> latestFieldsMap = new HashMap<>();
 
     public MultiTableUpdatedDataFieldsProcessFunction(
@@ -63,11 +64,13 @@ public class MultiTableUpdatedDataFieldsProcessFunction
         super(catalogLoader, typeMapping);
     }
 
+    // 处理schema变更事件
     @Override
     public void processElement(
             Tuple2<Identifier, CdcSchema> updatedSchema, Context context, Collector<Void> collector)
             throws Exception {
         Identifier tableId = updatedSchema.f0;
+        // 生成schemaManager
         SchemaManager schemaManager =
                 schemaManagers.computeIfAbsent(
                         tableId,
@@ -85,20 +88,22 @@ public class MultiTableUpdatedDataFieldsProcessFunction
             return;
         }
 
+        // 生成实际变更的schema
         Set<FieldIdentifier> latestFields =
                 latestFieldsMap.computeIfAbsent(tableId, id -> new HashSet<>());
         List<DataField> actualUpdatedDataFields =
                 actualUpdatedDataFields(updatedSchema.f1.fields(), latestFields);
-
         if (actualUpdatedDataFields.isEmpty() && updatedSchema.f1.comment() == null) {
             return;
         }
-
         CdcSchema actualUpdatedSchema =
                 new CdcSchema(
                         actualUpdatedDataFields,
                         updatedSchema.f1.primaryKeys(),
                         updatedSchema.f1.comment());
+
+
+        // 使用schemaManager修改schema
         for (SchemaChange schemaChange : extractSchemaChanges(schemaManager, actualUpdatedSchema)) {
             applySchemaChange(schemaManager, schemaChange, tableId, actualUpdatedSchema);
         }
@@ -107,6 +112,7 @@ public class MultiTableUpdatedDataFieldsProcessFunction
          * non-SchemaChange.AddColumn scenario. Otherwise, the previously existing fields cannot be
          * modified again.
          */
+        // 使用schemaManager从文件系统拿到最新的表schema，更新缓存
         latestFieldsMap.put(tableId, updateLatestFields(schemaManager));
     }
 }

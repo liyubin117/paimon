@@ -174,7 +174,7 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
         DataStream<CdcMultiplexRecord> newlyAddedTableStream =
                 SingleOutputStreamOperatorUtils.getSideOutput(
                         parsed, CdcDynamicTableParsingProcessFunction.DYNAMIC_OUTPUT_TAG);
-        // handles schema change for newly added tables
+        // 处理CdcSchema事件，变更schema。handles schema change for newly added tables
         SingleOutputStreamOperatorUtils.getSideOutput(
                         parsed,
                         CdcDynamicTableParsingProcessFunction.DYNAMIC_SCHEMA_CHANGE_OUTPUT_TAG)

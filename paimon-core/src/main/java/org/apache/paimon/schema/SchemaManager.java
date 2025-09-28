@@ -94,7 +94,15 @@ import static org.apache.paimon.utils.FileUtils.listVersionedFiles;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 import static org.apache.paimon.utils.Preconditions.checkState;
 
-/** Schema Manager to manage schema versions. */
+/** Schema Manager to manage schema versions.
+ * 负责管理表 schema（模式）的核心组件。它处理所有与 schema 相关的持久化操作，包括创建、读取、更新和版本管理
+ * Schema 持久化：将 TableSchema 对象序列化为 JSON 文件，并存储在表的 schema 目录下。每个 schema 文件代表一个版本。
+ * 版本管理：每个 schema 文件名都以 schema- 开头，后跟一个从 0 开始递增的版本号（ID），例如 schema-0, schema-1 等。这使得 Paimon 可以追踪 schema 的所有历史变更。
+ * Schema 读取：提供方法来读取最新版本的 schema、特定版本的 schema 或所有版本的 schema。
+ * Schema 创建：在创建新表时，负责初始化并提交第一个 schema 版本（schema-0）。
+ * Schema 变更：通过应用一系列 SchemaChange（如添加列、删除列、修改表选项等）来原子性地更新 schema，并生成一个新的、版本号加一的 schema 文件。
+ * 多分支支持：能够为不同的数据分支（branch）管理各自独立的 schema 演进路径。
+ * */
 @ThreadSafe
 public class SchemaManager implements Serializable {
 

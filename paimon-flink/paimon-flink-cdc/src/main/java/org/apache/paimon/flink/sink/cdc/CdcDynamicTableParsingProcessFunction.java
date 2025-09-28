@@ -112,6 +112,7 @@ public class CdcDynamicTableParsingProcessFunction<T> extends ProcessFunction<T,
                             }
                         });
 
+        // CDC 数据源（如 Debezium）会产生两种事件：数据变更事件（INSERT/UPDATE/DELETE）和 Schema 变更事件（如 ALTER TABLE）。CDC 连接器会将 Schema 变更事件路由到一个专门的侧输出流 (Side Output)
         CdcSchema schemaChange = parser.parseSchemaChange();
         if (schemaChange != null) {
             context.output(

@@ -76,9 +76,9 @@ public class CdcRecordStoreMultiWriteOperator
 
     private MemoryPoolFactory memoryPoolFactory;
     private Catalog catalog;
-    private Map<Identifier, FileStoreTable> tables;
+    private Map<Identifier, FileStoreTable> tables; // 表缓存。Key 是表的唯一标识符 Identifier，Value 是该表的 FileStoreTable 对象，其中包含了表的元数据，最重要的就是 Schema
     private StoreSinkWriteState state;
-    private Map<Identifier, StoreSinkWrite> writes;
+    private Map<Identifier, StoreSinkWrite> writes; // 写入器实例的缓存。Key 同样是 Identifier，Value 是为该表创建的 StoreSinkWrite 实例，负责将数据写入内存缓冲区、刷盘等
     private String commitUser;
     private ExecutorService compactExecutor;
 
@@ -164,17 +164,26 @@ public class CdcRecordStoreMultiWriteOperator
         boolean logCorruptRecord = table.coreOptions().toConfiguration().get(LOG_CORRUPT_RECORD);
         Optional<GenericRow> optionalConverted =
                 toGenericRow(record.record(), table.schema().fields(), logCorruptRecord);
+        // 当schema变更时，由于和旧 Schema 不匹配，转换会失败，optionalConverted 为空
         if (!optionalConverted.isPresent()) {
             FileStoreTable latestTable = table;
+            // 进入等待-转换循环，直到转换成功后刷新到文件或者重试次数达到上限
             for (int retry = 0; retry < retryCnt; ++retry) {
+                // 关键步骤1：从 Catalog 重新加载表的最新元数据
                 latestTable = latestTable.copyWithLatestSchema();
+
+                // 关键步骤2：用新的 Table 对象更新缓存。
                 tables.put(tableId, latestTable);
+
+                // 用新的 Schema 再次尝试转换
                 optionalConverted =
                         toGenericRow(
                                 record.record(), latestTable.schema().fields(), logCorruptRecord);
                 if (optionalConverted.isPresent()) {
+                    // 转换成功，跳出循环
                     break;
                 }
+                // 短暂休眠，等待上游的 Schema 变更算子完成对 Catalog 的修改
                 Thread.sleep(
                         latestTable
                                 .coreOptions()
