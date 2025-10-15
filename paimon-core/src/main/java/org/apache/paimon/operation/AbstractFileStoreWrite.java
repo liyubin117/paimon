@@ -431,6 +431,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                         ? null
                         : dbMaintainerFactory.create(
                                 partition, bucket, restored.dynamicBucketIndex());
+        // 生成dv索引维护器
         BucketedDvMaintainer dvMaintainer =
                 dvMaintainerFactory == null
                         ? null
@@ -449,7 +450,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                         getMaxSequenceNumber(restoreFiles),
                         null,
                         compactExecutor(),
-                        dvMaintainer);
+                        dvMaintainer); // 将 dvMaintainer传递给 createWriter方法
         notifyNewWriter(writer);
 
         Snapshot previousSnapshot = restored.snapshot();

@@ -36,7 +36,8 @@ import java.util.function.Function;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
 /**
- * Wrapper for {@link MergeFunction}s to produce changelog by lookup during the compaction involving
+ * 在合并（Compaction）过程中，为涉及 L0 文件的 key 生成正确的 Changelog（INSERT, DELETE, UPDATE_BEFORE/AFTER），并处理删除操作
+ * <p>Wrapper for {@link MergeFunction}s to produce changelog by lookup during the compaction involving
  * level 0 files.
  *
  * <p>Changelog records are generated in the process of the level-0 file participating in the
@@ -53,15 +54,15 @@ import static org.apache.paimon.utils.Preconditions.checkArgument;
 public class LookupChangelogMergeFunctionWrapper<T>
         implements MergeFunctionWrapper<ChangelogResult> {
 
-    private final LookupMergeFunction mergeFunction;
-    private final Function<InternalRow, T> lookup;
+    private final LookupMergeFunction mergeFunction; // 负责对同一个主键的所有待合并记录（candidates）进行初步处理，其核心方法 pickHighLevel()用于从这些待合并记录中，找出已经存在于本次合并的高层级(level>0)的层数最小的那一条
+    private final Function<InternalRow, T> lookup; // 查找函数。当 mergeFunction在当前待合并的记录中找不到高层级的旧记录时，就会调用这个 lookup函数去所有更高层级的文件中进行外部查找。这是实现跨层级操作的关键
 
     private final ChangelogResult reusedResult = new ChangelogResult();
     private final KeyValue reusedBefore = new KeyValue();
     private final KeyValue reusedAfter = new KeyValue();
     @Nullable private final RecordEqualiser valueEqualiser;
     private final LookupStrategy lookupStrategy;
-    private final @Nullable BucketedDvMaintainer deletionVectorsMaintainer;
+    private final @Nullable BucketedDvMaintainer deletionVectorsMaintainer; // dv索引维护者
     private final Comparator<KeyValue> comparator;
 
     public LookupChangelogMergeFunctionWrapper(
@@ -99,20 +100,27 @@ public class LookupChangelogMergeFunctionWrapper<T>
         mergeFunction.add(kv);
     }
 
+    /**
+     * 清晰地展示了 Paimon 的 Compaction 机制：
+     * 1. 优先使用当前合并单元内的信息拿到旧值 (pickHighLevel)。
+     * 2. 如果信息不足，则通过 lookup查找更高层级、未参与合并的文件。
+     * 3. 当 lookup找到需要被更新或删除的旧数据时，如果该数据所在的文件不被重写，就调用 deletionVectorsMaintainer.notifyNewDeletion()来记录一个删除标记。
+     * 4. 这个删除标记最终会被 dvMaintainer写入到索引文件中，并在查询时调用 deletionVectorsMaintainer.deletionVectorOf。
+     */
     @Override
     public ChangelogResult getResult() {
         // 1. Find the latest high level record and compute containLevel0
-        KeyValue highLevel = mergeFunction.pickHighLevel();
+        KeyValue highLevel = mergeFunction.pickHighLevel(); // 从这些候选kv中，找到层数最小（level 数字最小且 > 0）的那条记录。这条记录就是这个主键在本次合并范围内的“旧值”
         boolean containLevel0 = mergeFunction.containLevel0();
 
-        // 2. Lookup if latest high level record is absent
+        // 2. 如果找不到旧值，意味着当前合并的所有文件中，要么只有 L0 的记录，要么根本没有这个 key 的记录。则进行外部lookup
         if (highLevel == null) {
-            T lookupResult = lookup.apply(mergeFunction.key());
+            T lookupResult = lookup.apply(mergeFunction.key()); // 去未参与未次合并的、更高层级文件中查找此key
             if (lookupResult != null) {
-                if (lookupStrategy.deletionVector) {
-                    PositionedKeyValue positionedKeyValue = (PositionedKeyValue) lookupResult;
+                if (lookupStrategy.deletionVector) { // 若在更高层级找到了旧值且开启了dv
+                    PositionedKeyValue positionedKeyValue = (PositionedKeyValue) lookupResult; // 包装，不仅包含此旧值的kv，还包含其物理位置（文件名、行号）
                     highLevel = positionedKeyValue.keyValue();
-                    deletionVectorsMaintainer.notifyNewDeletion(
+                    deletionVectorsMaintainer.notifyNewDeletion( // 关键逻辑，通知 dvMaintainer，“请在 fileName这个文件的 rowPosition这一行上，标记一个删除位”
                             positionedKeyValue.fileName(), positionedKeyValue.rowPosition());
                 } else {
                     highLevel = (KeyValue) lookupResult;
@@ -127,6 +135,7 @@ public class LookupChangelogMergeFunctionWrapper<T>
         KeyValue result = mergeFunction.getResult();
 
         // 4. Set changelog when there's level-0 records
+        // 将所有记录（包括 L0 的新记录和找到的 highLevel旧记录）交给底层的 mergeFunction计算出最终结果 result。然后根据 highLevel(旧值) 和 result(新值) 生成 Changelog
         reusedResult.reset();
         if (containLevel0 && lookupStrategy.produceChangelog) {
             setChangelog(highLevel, result);
@@ -135,6 +144,9 @@ public class LookupChangelogMergeFunctionWrapper<T>
         return reusedResult.setResult(result);
     }
 
+    /**
+     * 如果 highLevel存在，result是新值，就会生成 UPDATE_BEFORE和 UPDATE_AFTER。如果 highLevel不存在，result是新值，就会生成 INSERT
+     */
     private void setChangelog(@Nullable KeyValue before, KeyValue after) {
         if (before == null || !before.isAdd()) {
             if (after.isAdd()) {

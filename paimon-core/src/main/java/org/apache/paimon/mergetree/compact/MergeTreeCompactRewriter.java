@@ -42,7 +42,9 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 
-/** Default {@link CompactRewriter} for merge trees. */
+/** Default {@link CompactRewriter} for merge trees.
+ * 简单合并器，仅输出最终结果，不处理 Changelog 和删除向量
+ * */
 public class MergeTreeCompactRewriter extends AbstractCompactRewriter {
 
     protected final FileReaderFactory<KeyValue> readerFactory;

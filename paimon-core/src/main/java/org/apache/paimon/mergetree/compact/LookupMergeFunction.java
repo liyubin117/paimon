@@ -81,6 +81,10 @@ public class LookupMergeFunction implements MergeFunction<KeyValue> {
         return containLevel0;
     }
 
+    /**
+     * 用于从候选数据中筛选出层级最低的记录（不包括level <= 0的数据），作为合并结果。
+     * 遍历candidates中的所有键值对，跳过未落盘和L0数据（level <= 0），保留高层中的最小level的有效记录。若无有效记录则返回null
+     */
     @Nullable
     public KeyValue pickHighLevel() {
         KeyValue highLevel = null;

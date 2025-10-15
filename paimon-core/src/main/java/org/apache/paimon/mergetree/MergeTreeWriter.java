@@ -58,6 +58,7 @@ import java.util.stream.Collectors;
  * 每个分区的每个桶 有 且 只有 一个 MergeTreeWriter
  * MergeTreeWriter 通过 KeyValue 中的 RowKind 来携带增、删、改的语义。在写数据时，它将这些带有语义的记录先放入缓冲区，然后在刷写时，将原始记录流写入 changelog 文件，将合并后的结果写入数据文件。这样既保证了数据文件的紧凑和高效查询，又通过 changelog 文件提供了完整的变更历史
  * 构造中通过 newSequenceNumber = maxSequenceNumber + 1; 尽可能维护统一的序列号
+ * 本身只负责生成L0文件，不修改老文件，会调用compaction合并
  * */
 public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
 

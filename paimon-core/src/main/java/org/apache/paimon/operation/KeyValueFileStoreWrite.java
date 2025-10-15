@@ -208,6 +208,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
         Comparator<InternalRow> keyComparator = keyComparatorSupplier.get();
         Levels levels = new Levels(keyComparator, restoreFiles, options.numLevels());
         CompactStrategy compactStrategy = createCompactStrategy(options);
+        // 接收 dvMaintainer，然后创建 CompactManager
         CompactManager compactManager =
                 createCompactManager(
                         partition, bucket, compactStrategy, compactExecutor, levels, dvMaintainer);
@@ -282,7 +283,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                             keyComparator,
                             userDefinedSeqComparator,
                             levels,
-                            dvMaintainer);
+                            dvMaintainer); // 在return那，dvMaintainer最终被传递给了 LookupMergeTreeCompactRewriter的构造函数
             return new MergeTreeCompactManager(
                     compactExecutor,
                     levels,
@@ -364,7 +365,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                                 lookupStrategy,
                                 UserDefinedSeqComparator.create(valueType, options));
             }
-            return new LookupMergeTreeCompactRewriter(
+            return new LookupMergeTreeCompactRewriter( // dvMaintainer最终被传递给了 LookupMergeTreeCompactRewriter的构造函数
                     maxLevel,
                     mergeEngine,
                     createLookupLevels(partition, bucket, levels, processor, lookupReaderFactory),

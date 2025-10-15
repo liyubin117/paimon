@@ -26,7 +26,11 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 
-/** A {@link FileRecordIterator} wraps a {@link FileRecordIterator} and {@link DeletionVector}. */
+/** A {@link FileRecordIterator} wraps a {@link FileRecordIterator} and {@link DeletionVector}.
+ * dv模式的迭代读取逻辑：
+ * 只会看到那些未被标记为删除的记录
+ * 被删除的记录会被透明地过滤掉
+ * */
 public class ApplyDeletionFileRecordIterator
         implements FileRecordIterator<InternalRow>, DeletionFileRecordIterator {
 
@@ -63,13 +67,15 @@ public class ApplyDeletionFileRecordIterator
     @Override
     public InternalRow next() throws IOException {
         while (true) {
-            InternalRow next = iterator.next();
+            InternalRow next = iterator.next();  // 从底层迭代器获取下一条记录
             if (next == null) {
-                return null;
+                return null;  // 没有更多记录
             }
+            // 检查当前记录的位置是否在删除向量中标记为已删除
             if (!deletionVector.isDeleted(returnedPosition())) {
-                return next;
+                return next;  // 如果未被删除，则返回该记录
             }
+            // 如果被删除，则继续循环获取下一条记录
         }
     }
 

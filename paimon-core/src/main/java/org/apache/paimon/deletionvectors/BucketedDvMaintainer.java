@@ -31,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Maintainer of deletionVectors index. */
+/** Maintainer of deletionVectors index.
+ * 维护当前桶的dv索引
+ * */
 public class BucketedDvMaintainer {
 
     private final DeletionVectorsIndexFile dvIndexFile;
@@ -54,7 +56,7 @@ public class BucketedDvMaintainer {
     /**
      * Notifies a new deletion which marks the specified row position as deleted with the given file
      * name.
-     *
+     * 写。通知新的删除，该删除使用给定的文件名将指定的行位置标记为已删除。
      * @param fileName The name of the file where the deletion occurred.
      * @param position The row position within the file that has been deleted.
      */
@@ -122,7 +124,7 @@ public class BucketedDvMaintainer {
 
     /**
      * Retrieves the deletion vector associated with the specified file name.
-     *
+     * 读。解析出指定文件对应的dv
      * @param fileName The name of the file for which the deletion vector is requested.
      * @return An {@code Optional} containing the deletion vector if it exists, or an empty {@code
      *     Optional} if not.
@@ -161,6 +163,7 @@ public class BucketedDvMaintainer {
             return handler;
         }
 
+        // 实例化一个 DeletionVectorsMaintainer（简称 dvMaintainer）
         public BucketedDvMaintainer create(
                 BinaryRow partition, int bucket, @Nullable List<IndexFileMeta> restoredFiles) {
             if (restoredFiles == null) {

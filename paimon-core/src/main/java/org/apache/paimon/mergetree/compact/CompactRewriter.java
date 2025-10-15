@@ -25,7 +25,10 @@ import org.apache.paimon.mergetree.SortedRun;
 import java.io.Closeable;
 import java.util.List;
 
-/** Rewrite sections to new level. */
+/** Rewrite sections to new level.
+ * 读取多个旧文件，合并它们，然后生成新的、更优化的文件。它是一个“重写者”
+ * 如果开启了dv，在合并过程中，它有机会发现“某个在高层级文件中的数据需要被标记为删除”，这时就需要更新索引
+ * */
 public interface CompactRewriter extends Closeable {
 
     /**

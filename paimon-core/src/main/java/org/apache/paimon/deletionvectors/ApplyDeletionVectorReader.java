@@ -27,7 +27,9 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 
-/** A {@link RecordReader} which apply {@link DeletionVector} to filter record. */
+/** A {@link RecordReader} which apply {@link DeletionVector} to filter record.
+ * Deletion Vector (DV) 的目的是在不重写数据文件的情况下，标记其中的某些行已被删除。这对于 partial-update 等需要先删除旧值再插入新值的场景至关重要。
+ * */
 public class ApplyDeletionVectorReader implements FileRecordReader<InternalRow> {
 
     private final FileRecordReader<InternalRow> reader;
@@ -48,6 +50,11 @@ public class ApplyDeletionVectorReader implements FileRecordReader<InternalRow> 
         return deletionVector;
     }
 
+    /**
+     * 当调用 readBatch()方法时：
+     * 1. 从底层的 FileRecordReader获取一批记录
+     * 2. 返回一个 ApplyDeletionFileRecordIterator实例来迭代这些记录
+     */
     @Nullable
     @Override
     public FileRecordIterator<InternalRow> readBatch() throws IOException {

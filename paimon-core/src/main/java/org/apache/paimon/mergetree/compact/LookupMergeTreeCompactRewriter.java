@@ -50,6 +50,18 @@ import static org.apache.paimon.mergetree.compact.ChangelogMergeTreeRewriter.Upg
 /**
  * A {@link MergeTreeCompactRewriter} which produces changelog files by lookup for the compaction
  * involving level 0 files.
+ * 高级合并器，通过 Lookup 机制同时支持高效生成 Changelog 和协作处理删除向量
+ * 适用于changelog-producer = 'lookup'或 'input'的场景，以及启用删除向量的场景
+ * dv模式的核心组件，负责合并低层级（比如 L0）的文件。查找并标记删除，对于 L0 文件中的每一条记录，它需要去更高层级（L1, L2...）的文件中查找是否存在对应的旧记录
+ *
+ * 假设正在合并 L0 的文件，其中有一条 DELETE记录，主键为 pk=1。
+     * LookupMergeTreeCompactRewriter会使用 LookupLevels去更高层级（L1, L2...）查找 pk=1。
+     * LookupLevels找到了 pk=1的旧记录，它位于 L2 层的一个叫 data-file-A.orc的文件中，行号是 100。
+     * 因为这次 Compaction 只合并 L0 的文件，data-file-A.orc文件不会被重写。
+     * 为了让这条 DELETE记录生效，Rewriter 必须想办法标记 data-file-A.orc的第 100 行为“已删除”。
+     * 这就是 dvMaintainer发挥作用的时刻！
+         * Rewriter 会调用 dvMaintainer.notifyNewDeletion("data-file-A.orc", 100)。
+         * 该标记最终写入独立的删除向量索引文件，并在查询时过滤已删除行
  */
 public class LookupMergeTreeCompactRewriter<T> extends ChangelogMergeTreeRewriter {
 
@@ -182,6 +194,7 @@ public class LookupMergeTreeCompactRewriter<T> extends ChangelogMergeTreeRewrite
                 int outputLevel,
                 LookupLevels<T> lookupLevels,
                 @Nullable BucketedDvMaintainer deletionVectorsMaintainer) {
+            // 调用LookupChangelogMergeFunctionWrapper，是执行“查找并标记删除”这一核心逻辑的关键组件
             return new LookupChangelogMergeFunctionWrapper<>(
                     mfFactory,
                     key -> {

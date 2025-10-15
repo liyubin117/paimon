@@ -153,7 +153,7 @@ public interface DeletionVector extends DeletionVectorJudger {
         if (dvMaintainer == null) {
             return emptyFactory();
         }
-        return dvMaintainer::deletionVectorOf;
+        return fileName -> dvMaintainer.deletionVectorOf(fileName);
     }
 
     static Factory factory(

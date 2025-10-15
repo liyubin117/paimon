@@ -140,8 +140,9 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
                         null,
                         -1,
                         Collections.emptyMap());
-
+        // 获取与当前文件关联的删除向量
         Optional<DeletionVector> deletionVector = dvFactory.create(file.fileName());
+        // 如果存在非空的删除向量，则将基本的文件记录读取器包装在ApplyDeletionVectorReader中，作用是过滤掉已被标记为删除的记录
         if (deletionVector.isPresent() && !deletionVector.get().isEmpty()) {
             fileRecordReader =
                     new ApplyDeletionVectorReader(fileRecordReader, deletionVector.get());
