@@ -98,8 +98,10 @@ public class RowDataFileWriter extends StatsCollectingSingleFileWriter<InternalR
     @Override
     public DataFileMeta result() throws IOException {
         long fileSize = outputBytes;
+        // 调用 fieldStats()，将得到的统计信息 SimpleColStats[] 序列化后，与其他文件元数据（如行数、schema ID 等）一同封装到 DataFileMeta 对象中，最终记录在 Paimon 的 manifest 文件里，为后续的查询优化（如谓词下推）提供数据支持
         Pair<List<String>, SimpleStats> statsPair =
                 statsArraySerializer.toBinary(fieldStats(fileSize));
+
         DataFileIndexWriter.FileIndexResult indexResult =
                 dataFileIndexWriter == null
                         ? DataFileIndexWriter.EMPTY_RESULT

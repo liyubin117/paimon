@@ -44,7 +44,9 @@ import static org.apache.paimon.utils.InternalRowPartitionComputer.partToSimpleS
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
 /** Lookup file for cache remote file to local.
- * 本地文件缓存 (Local File Cache): Paimon 会将远程存储（如 HDFS/S3）上的数据文件拉取到本地磁盘进行缓存，避免每次查询都通过网络读取。这个缓存由 Caffeine 实现，具备 LRU 和超时淘汰策略。
+ * 当需要对某个 DataFileMeta 所描述的远程文件进行点查时，系统首先会检查本地是否存在一个对应的、已经构建好的LookupFile
+ * 如果存在（缓存命中），则直接使用这个本地查找文件进行快速查询，避免了读取和解析庞大的远程列式文件
+ * 本地文件缓存 (Local File Cache): Paimon 会将远程存储（如 HDFS/S3）上的数据文件拉取到本地磁盘进行缓存，避免每次查询都通过网络读取并解析。这个缓存由 Caffeine 实现，具备 LRU 和超时淘汰策略。
  * */
 public class LookupFile {
 

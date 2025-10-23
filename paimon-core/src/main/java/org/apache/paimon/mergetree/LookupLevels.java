@@ -124,13 +124,16 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
         return LookupUtils.lookup(keyComparator, key, level, this::lookup);
     }
 
+    /**
+     * lookup的关键逻辑
+     */
     @Nullable
     private T lookup(InternalRow key, DataFileMeta file) throws IOException {
-        LookupFile lookupFile = lookupFileCache.getIfPresent(file.fileName());
+        LookupFile lookupFile = lookupFileCache.getIfPresent(file.fileName()); // 如果缓存命中则直接使用，避免了网络传输和解析开销
 
         boolean newCreatedLookupFile = false;
         if (lookupFile == null) {
-            lookupFile = createLookupFile(file);
+            lookupFile = createLookupFile(file); // 如果缓存未命中，则构建
             newCreatedLookupFile = true;
         }
 
@@ -152,10 +155,13 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
     }
 
     private LookupFile createLookupFile(DataFileMeta file) throws IOException {
+        // 读取 DataFileMeta 指向的远程数据文件
         File localFile = localFileFactory.apply(file.fileName());
         if (!localFile.createNewFile()) {
             throw new IOException("Can not create new file: " + localFile);
         }
+
+        // 将文件中的所有 Key-Value 对写入一个新的、本地的、为快速查找而优化的文件中
         LookupStoreWriter kvWriter =
                 lookupStoreFactory.createWriter(localFile, bfGenerator.apply(file.rowCount()));
         LookupStoreFactory.Context context;
@@ -190,6 +196,7 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
             context = kvWriter.close();
         }
 
+        // 将这个新建的本地文件封装成 LookupFile 对象，并以远程文件的名字为 Key 存入缓存
         ownCachedFiles.add(file.fileName());
         return new LookupFile(
                 localFile,

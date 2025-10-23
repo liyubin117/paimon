@@ -49,6 +49,9 @@ import static org.apache.paimon.io.DataFilePathFactory.dataFileToFileIndexPath;
  * A {@link StatsCollectingSingleFileWriter} to write data files containing {@link KeyValue}s. Also
  * produces {@link DataFileMeta} after writing a file.
  *
+ * 继承了 StatsCollectingSingleFileWriter，这意味着它天生就具备了收集统计信息的能力
+ * 将通用的列统计信息与 KeyValue 特有的元数据（如 min/max seq用于数据可见性判断、min/max key用于范围查找和compaction、deleteRecordCount）结合，最终生成一个标准化的 DataFileMeta 对象
+ *
  * <p>NOTE: records given to the writer must be sorted because it does not compare the min max keys
  * to produce {@link DataFileMeta}.
  */

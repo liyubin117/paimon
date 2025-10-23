@@ -34,10 +34,23 @@ public interface SimpleStatsProducer {
 
     boolean isStatsDisabled();
 
+    /**
+     * 该生产者是否**需要逐条记录（per-record）**进行统计。
+     * - 如果为 true，意味着写入的每一行数据都需要被 collect 方法处理。
+     * - 如果为 false，则意味着统计信息可以从最终生成的文件中一次性提取，无需在写入过程中逐条处理
+     */
     boolean requirePerRecord();
 
+    /**
+     * 逐条收集行数据的统计信息。这个方法只有在 requirePerRecord() 返回 true 时才应该被调用
+     */
     void collect(InternalRow row);
 
+    /**
+     * 提取最终的统计结果。
+     * - 对于逐条收集的模式，它会返回内存中已经聚合好的结果。
+     * - 对于非逐条收集的模式，它会利用传入的 fileIO 和 path 等参数去读取物理文件（例如 Parquet/ORC 的文件尾），并从中解析出统计信息。
+     */
     SimpleColStats[] extract(FileIO fileIO, Path path, long length) throws IOException;
 
     static SimpleStatsProducer disabledProducer() {
