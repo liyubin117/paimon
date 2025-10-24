@@ -38,6 +38,12 @@ import static org.apache.paimon.table.SpecialFields.VALUE_KIND;
 /**
  * A key value, including user key, sequence number, value kind and value. This object can be
  * reused.
+ *
+ * Paimon 数据组织和处理的基石。它通过将主键 (key)、序列号 (sequenceNumber)、操作类型 (valueKind) 和业务数据 (value) 这四个核心元素绑定在一起，构建了一个功能完备、信息全面的数据单元。
+ *
+ * 逻辑上，它清晰地表达了一次数据变更的完整语义。
+ * 物理上，它通过 _SEQUENCE_NUMBER 和 _VALUE_KIND 这两个系统字段，将核心元数据持久化到数据文件中。
+ * 设计上，它的可重用性体现了 Paimon 对性能的极致追求
  */
 public class KeyValue {
 
@@ -50,7 +56,7 @@ public class KeyValue {
     private RowKind valueKind;
     private InternalRow value;
     // determined after read from file
-    private int level;
+    private int level; // 代表此记录所在的LSM树的层级，是一个运行时元数据，一个文件中的所有数据都是该值，不需要额外在文件中存每条记录的level，读取时拿到即可
 
     public KeyValue replace(InternalRow key, RowKind valueKind, InternalRow value) {
         return replace(key, UNKNOWN_SEQUENCE, valueKind, value);

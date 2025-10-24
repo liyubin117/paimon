@@ -159,14 +159,14 @@ public class PrimaryKeyFileStoreTable extends AbstractFileStoreTable {
 
     @Override
     public TableWriteImpl<KeyValue> newWrite(String commitUser, @Nullable Integer writeId) {
-        KeyValue kv = new KeyValue();
+        KeyValue kv = new KeyValue(); // 创建一个kv对象
         return new TableWriteImpl<>(
                 rowType(),
                 store().newWrite(commitUser, writeId),
                 createRowKeyExtractor(),
                 (record, rowKind) ->
                         kv.replace(
-                                record.primaryKey(),
+                                record.primaryKey(), // 赋值key、seq、valueKind、value
                                 KeyValue.UNKNOWN_SEQUENCE,
                                 rowKind,
                                 record.row()),

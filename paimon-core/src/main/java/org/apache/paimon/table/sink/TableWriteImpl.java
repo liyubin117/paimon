@@ -157,6 +157,9 @@ public class TableWriteImpl<T> implements InnerTableWrite, Restorable<List<State
         writeAndReturn(row);
     }
 
+    /**
+     * 接收到此InternalRow
+     */
     @Override
     public void write(InternalRow row, int bucket) throws Exception {
         writeAndReturn(row, bucket);
@@ -183,7 +186,7 @@ public class TableWriteImpl<T> implements InnerTableWrite, Restorable<List<State
     public SinkRecord writeAndReturn(InternalRow row, int bucket) throws Exception {
         checkNullability(row);
         row = wrapDefaultValue(row);
-        RowKind rowKind = RowKindGenerator.getRowKind(rowKindGenerator, row);
+        RowKind rowKind = RowKindGenerator.getRowKind(rowKindGenerator, row); // 从这个 InternalRow 中提取出 RowKind
         if (rowKindFilter != null && !rowKindFilter.test(rowKind)) {
             return null;
         }

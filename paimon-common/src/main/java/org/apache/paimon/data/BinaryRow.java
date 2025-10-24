@@ -35,6 +35,19 @@ import java.nio.ByteOrder;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
 /**
+ * 将一行数据紧凑地存储在一块连续的内存中，以避免Java对象的开销，并实现高效的序列化和反序列化
+ * 内存布局：定长部分、变长部分
+ * 定长部分：位于所在内存区域的开头
+ * - header(1字节，存RowKind)
+ * - NullBits（按8字节对齐，位图，用来紧凑记录哪些字段是null，每个字段对应一个bit，1表示null）
+ * - 字段值（为每个字段预留8字节，对于定长类型的值会直接存，对于变长类型的值会存一个指针）
+ * 变长部分：包含了所有变长类型字段的实际二进制数据，这些数据被紧凑地拼接在一起，定长部分的字段值的指针指向此区域
+ *
+ * 快速访问：通过 (基地址 + 字段偏移) 的方式，可以实现对任何定长字段的 O(1) 随机访问。对于变长字段，也只需要一次解引用即可定位到数据。
+ * 空间高效：通过 Null BitSet 和紧凑的变长区，极大地节省了存储空间。不存储schema，而是在读写时由外部传入schema信息
+ * CPU 友好：二进制的紧凑布局有利于 CPU 缓存。比较、哈希等操作可以直接在字节层面进行，非常快。
+ * 零拷贝/序列化：当数据需要在网络间传输或写入磁盘时，可以直接拷贝 BinaryRow 底层的字节数组，几乎没有额外的序列化开销。
+ *
  * An implementation of {@link InternalRow} which is backed by {@link MemorySegment} instead of
  * Object. It can significantly reduce the serialization/deserialization of Java objects.
  *

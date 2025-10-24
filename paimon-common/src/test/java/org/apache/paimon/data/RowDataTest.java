@@ -140,6 +140,7 @@ public class RowDataTest {
         assertThat(row.isNullAt(10)).isTrue();
     }
 
+    // 用于测试
     private BinaryRow getBinaryRow() {
         BinaryRow row = new BinaryRow(19);
         BinaryRowWriter writer = new BinaryRowWriter(row);

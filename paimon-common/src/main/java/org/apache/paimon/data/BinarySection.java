@@ -28,7 +28,9 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-/** Describe a section of memory. */
+/** Describe a section of memory.
+ * 封装了对底层内存段（MemorySegment[]）的引用、偏移量（offset）和大小（sizeInBytes），为 BinaryRow 提供了操作二进制数据的基础
+ * */
 public abstract class BinarySection implements Serializable {
 
     private static final long serialVersionUID = 1L;

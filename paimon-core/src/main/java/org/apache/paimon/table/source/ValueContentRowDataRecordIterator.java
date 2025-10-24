@@ -31,6 +31,9 @@ public class ValueContentRowDataRecordIterator extends ResetRowKindRecordIterato
         super(kvIterator);
     }
 
+    /**
+     * 将KeyValue转换回InternalRow给下游使用
+     */
     @Override
     public InternalRow next() throws IOException {
         KeyValue kv = nextKeyValue();

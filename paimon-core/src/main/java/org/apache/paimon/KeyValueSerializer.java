@@ -73,6 +73,11 @@ public class KeyValueSerializer extends ObjectSerializer<KeyValue> {
         return reusedRow.replace(reusedKeyWithMeta.replace(key, reusedMeta), value);
     }
 
+    /**
+     * 将此InternalRow解析回KeyValue
+     * @param row
+     * @return
+     */
     @Override
     public KeyValue fromRow(InternalRow row) {
         reusedKey.replace(row);
