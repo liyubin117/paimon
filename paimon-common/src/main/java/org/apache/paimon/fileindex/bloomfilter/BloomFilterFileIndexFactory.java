@@ -23,7 +23,9 @@ import org.apache.paimon.fileindex.FileIndexerFactory;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.types.DataType;
 
-/** Index factory to construct {@link BloomFilterFileIndex}. */
+/** Index factory to construct {@link BloomFilterFileIndex}.
+ * 布隆过滤器入口类
+ * */
 public class BloomFilterFileIndexFactory implements FileIndexerFactory {
 
     public static final String BLOOM_FILTER = "bloom-filter";
@@ -33,6 +35,9 @@ public class BloomFilterFileIndexFactory implements FileIndexerFactory {
         return BLOOM_FILTER;
     }
 
+    /**
+     * 当用户配置 'file-index.bloom-filter.columns' = '...' 时，就会实例化这个类
+     */
     @Override
     public FileIndexer create(DataType type, Options options) {
         return new BloomFilterFileIndex(type, options);
