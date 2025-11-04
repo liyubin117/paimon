@@ -48,7 +48,7 @@ import static org.apache.paimon.codegen.CodeGenUtils.newRecordComparator;
 public class BinaryExternalSortBuffer implements SortBuffer {
 
     private final BinaryRowSerializer serializer;
-    private final BinaryInMemorySortBuffer inMemorySortBuffer;
+    private final BinaryInMemorySortBuffer inMemorySortBuffer; // 包含一个 BinaryInMemorySortBuffer 作为内存中的缓冲区
     private final IOManager ioManager;
     private final SpillChannelManager channelManager;
     private final int maxNumFileHandles;
@@ -193,7 +193,7 @@ public class BinaryExternalSortBuffer implements SortBuffer {
     @Override
     public boolean write(InternalRow record) throws IOException {
         while (true) {
-            boolean success = inMemorySortBuffer.write(record);
+            boolean success = inMemorySortBuffer.write(record); // 先写到内存SortBuffer
             if (success) {
                 this.numRecords++;
                 return true;
@@ -201,7 +201,7 @@ public class BinaryExternalSortBuffer implements SortBuffer {
             if (inMemorySortBuffer.isEmpty()) {
                 // did not fit in a fresh buffer, must be large...
                 throw new IOException("The record exceeds the maximum size of a sort buffer.");
-            } else {
+            } else { // 内存缓冲区写满时（write 返回 false），溢写到磁盘
                 spill();
 
                 if (spillChannelIDs.size() >= maxNumFileHandles) {
@@ -225,6 +225,7 @@ public class BinaryExternalSortBuffer implements SortBuffer {
         spill();
 
         List<FileIOChannel> openChannels = new ArrayList<>();
+        // BinaryExternalMerger对所有磁盘上的有序文件进行多路归并排序，最终返回一个全局有序的迭代器
         BinaryMergeIterator<BinaryRow> iterator =
                 merger.getMergingIterator(spillChannelIDs, openChannels);
         channelManager.addOpenChannels(openChannels);

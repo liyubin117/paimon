@@ -18,7 +18,12 @@
 
 package org.apache.paimon.sort;
 
-/** Quick sort {@link IndexedSorter}. */
+/** Quick sort {@link IndexedSorter}.
+ * 混合排序策略：结合了快速排序、插入排序和堆排序的优点，在平均性能、小数据量性能和最坏情况下的稳定性之间取得了很好的平衡。
+ * 为分页内存优化：其核心逻辑是围绕页号和页内偏移构建的，能够直接在非连续的内存块上高效工作，这是它适用于大数据处理引擎的关键。
+ * 先进的算法细节：采用了三数取中、三路分区和尾递归优化等多种技巧，将快速排序算法的性能和健壮性推向了极致。
+ * 高度抽象：通过 IndexedSorter 和 IndexedSortable 接口，实现了算法与数据存储的解耦，具有很强的通用性
+ * */
 public final class QuickSort implements IndexedSorter {
 
     private static final IndexedSorter alt = new HeapSort();

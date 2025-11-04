@@ -24,21 +24,36 @@ import org.apache.paimon.utils.MutableObjectIterator;
 
 import java.io.IOException;
 
-/** Sort buffer to sort records. */
+/** Sort buffer to sort records.
+ * 用于处理排序的核心抽象接口。它的主要职责是：接收一批数据记录（InternalRow），在内存中对它们进行排序，并提供一个有序的迭代器来访问这些排好序的数据。 当内存不足以容纳所有数据时，它还隐含了将数据溢出（Spill）到磁盘的能力
+ * 这种设计使得上层逻辑（如 SortOperator、SortBufferWriteBuffer）可以不必关心排序的具体细节（是纯内存还是溢出到磁盘），从而实现了清晰的分层和强大的功能扩展。
+ * */
 public interface SortBuffer {
 
+    /** 返回当前 buffer 中的记录数 */
     int size();
 
+    /** 清空 buffer，释放所有资源，使其可以被重用 */
     void clear();
 
+    /** 获取当前 buffer 占用的内存大小（字节）*/
     long getOccupancy();
 
-    /** Flush memory, return false if not supported. */
+    /**
+     * 尝试将内存中的数据刷写到外部存储（如磁盘）。
+     * 这是为外部排序设计的关键方法。如果不支持（例如纯内存排序），则返回 false。
+     */
     boolean flushMemory() throws IOException;
 
-    /** @return false if the buffer is full. */
+    /**
+     * 向 buffer 中写入一条记录。
+     * @return 如果 buffer 已满，无法写入，则返回 false。调用方需要处理这种情况（通常是触发 flush）。
+     */
     boolean write(InternalRow record) throws IOException;
 
-    /** @return iterator with sorting. */
+    /**
+     * 对 buffer 中已写入的所有记录进行排序，并返回一个有序的迭代器。
+     * 返回的迭代器中的元素是 BinaryRow，这是一种序列化后的行格式，便于在内存和磁盘间高效传输。
+     */
     MutableObjectIterator<BinaryRow> sortedIterator() throws IOException;
 }

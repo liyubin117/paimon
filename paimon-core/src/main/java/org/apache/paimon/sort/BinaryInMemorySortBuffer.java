@@ -155,6 +155,12 @@ public class BinaryInMemorySortBuffer extends BinaryIndexedSortable implements S
     /**
      * Writes a given record to this sort buffer. The written record will be appended and take the
      * last logical position.
+     * 1.一条 InternalRow 记录传来。
+     * 2.BinaryInMemorySortBuffer 调用 inputSerializer.serializeToPages 将这条完整的记录序列化并写入 recordBuffer。
+     * 3.获取这条记录在 recordBuffer 中的起始位置（指针 currOffset）。
+     * 4.调用 writeIndexAndNormalizedKey(record, currOffset)，在 sortIndex 中创建一个新的索引条目，包含 currOffset 指针和从 record 计算出的 Normalized Key。
+     * 5.当需要排序时（比如 swap 和 compare 操作），算法只会操作 sortIndex 中这些轻量的条目。因为 Normalized Key 的存在，compare 操作会非常快。因为只交换指针和Key，swap 操作的开销也非常小。
+     * 6.排序完成后，sortIndex 中的条目就按正确的顺序排列好了。此时再根据每个条目中的指针，从 recordBuffer 中按序读出完整的记录，就得到了最终的排序结果。
      *
      * @param record The record to be written.
      * @return True, if the record was successfully written, false, if the sort buffer was full.
@@ -242,6 +248,10 @@ public class BinaryInMemorySortBuffer extends BinaryIndexedSortable implements S
         };
     }
 
+    /**
+     * 使用快速排序（QuickSort）对内存中的数据进行排序
+     * 适用于数据量明确可以完全放入内存的场景。它是 BinaryExternalSortBuffer 的一个内部组件
+     */
     @Override
     public final MutableObjectIterator<BinaryRow> sortedIterator() {
         if (numRecords > 0) {

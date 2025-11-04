@@ -96,7 +96,7 @@ public class SortOperator extends TableStreamOperator<InternalRow>
                                 .getEnvironment()
                                 .getIOManager()
                                 .getSpillingDirectoriesPaths());
-        buffer =
+        buffer = // Flink 作业中使用的 SortOperator 就是依赖 BinaryExternalSortBuffer 来对输入流进行排序，以满足 Paimon 表写入前的顺序要求
                 BinaryExternalSortBuffer.create(
                         ioManager,
                         rowType,
