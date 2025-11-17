@@ -29,7 +29,14 @@ import org.apache.paimon.types.RowKind;
 import java.io.IOException;
 import java.util.function.Consumer;
 
-/** A {@link LocalMerger} which stores records in {@link SortBufferWriteBuffer}. */
+/** A {@link LocalMerger} which stores records in {@link SortBufferWriteBuffer}.
+ * 在数据被 Shuffle 到不同的 Bucket 之前，在 Flink 的 Source 端或者中间算子内部，对数据进行一次本地的预合并（Pre-aggregation）
+ * 目的非常明确：缓解数据倾斜
+ *      如果没有 Local Merge: 这成千上万条记录会被原封不动地通过网络 Shuffle 到下游负责该 Key 所在 Bucket 的 MergeTreeWriter 任务中。这会造成巨大的网络开销，并且给下游的单个 MergeTreeWriter 带来巨大的写入压力。
+ *      有了 Local Merge: SortBufferLocalMerger 会在发送端开辟一块内存缓冲区（由 local-merge-buffer-size 参数控制）。当这成千上万条记录到达时，它们会被缓存在这个 Buffer 中，并利用 SortBufferWriteBuffer 的能力进行排序和合并。最终，可能只有一条合并后的记录被发送到下游。
+ *
+ * 通过 local-merge-buffer-size 这个配置项来决定是否启用 Local Merge
+ * */
 public class SortBufferLocalMerger implements LocalMerger {
 
     private final SortBufferWriteBuffer sortBuffer;

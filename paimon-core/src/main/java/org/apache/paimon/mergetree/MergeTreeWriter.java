@@ -55,10 +55,16 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /** A {@link RecordWriter} to write records and generate {@link CompactIncrement}.
+ * Paimon写链路的核心，负责一个分区的一个桶内的数据写入、合并、提交
  * 每个分区的每个桶 有 且 只有 一个 MergeTreeWriter
  * MergeTreeWriter 通过 KeyValue 中的 RowKind 来携带增、删、改的语义。在写数据时，它将这些带有语义的记录先放入缓冲区，然后在刷写时，将原始记录流写入 changelog 文件，将合并后的结果写入数据文件。这样既保证了数据文件的紧凑和高效查询，又通过 changelog 文件提供了完整的变更历史
  * 构造中通过 newSequenceNumber = maxSequenceNumber + 1; 尽可能维护统一的序列号
+ *
  * 本身只负责生成L0文件，不修改老文件，会调用compaction合并
+ * 具体过程：
+ *      * 阶段一 (内存/Spill): SortBufferWriteBuffer 接收无序数据，在内存中排序，内存不够时，将临时的、未合并的排好序的数据块溢写到本地临时磁盘，以换取内存。
+ *      * 阶段二 (Flush): MergeTreeWriter 命令 SortBufferWriteBuffer 将其管理的所有数据（无论在内存还是在临时磁盘）作为一个全局有序且合并后的数据流提供出来。
+ *      * 阶段三 (写入正式文件): MergeTreeWriter 消费这个干净的数据流，将其写入最终的、正式的 Level-0 数据文件（在本地或远程存储），并可能同时生成 Changelog 文件。
  * */
 public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
 
@@ -74,7 +80,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
     private final RowType valueType;
     private final CompactManager compactManager; // 合并任务管理器。它负责维护该 Bucket 内所有数据文件的层级结构（Levels），并根据策略决定何时、对哪些文件发起 Compaction
     private final Comparator<InternalRow> keyComparator;
-    private final MergeFunction<KeyValue> mergeFunction; // 定义了数据合并的逻辑
+    private final MergeFunction<KeyValue> mergeFunction; // 定义了数据合并的逻辑，对于主键表，它可能是“保留最新的值”（Deduplicate）；对于聚合表，它可能是“对值进行累加”
     private final KeyValueFileWriterFactory writerFactory; // 文件写入工厂，负责创建RollingFileWriter（用于写入SST数据文件和 Changelog 文件）
     private final boolean commitForceCompact;
     private final ChangelogProducer changelogProducer;
@@ -277,7 +283,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         compactManager.triggerCompaction(forcedFullCompaction);
     }
 
-    // Flink Checkpoint 时被调用的关键方法
+    // Flink Checkpoint 时被调用的关键方法，完成所有待处理数据的刷盘和合并，并收集本次 Checkpoint 期间文件变动的信息（新增了哪些文件、删除了哪些文件），打包成 CommitIncrement 返回给上层
     @Override
     public CommitIncrement prepareCommit(boolean waitCompaction) throws Exception {
         // 1. 确保内存中的数据全部刷盘
@@ -294,7 +300,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         if (compactManager.shouldWaitForPreparingCheckpoint()) {
             waitCompaction = true;
         }
-        // 2. 同步等待可能正在进行的Compaction任务完成，将其结果（哪些文件被合并，生成了哪些新文件）更新到 compactBefore 和 compactAfter 集合中
+        // 2. 同步等待可能正在进行的Compaction任务完成，将其结果（哪些文件被合并，生成了哪些新文件）分别更新到 compactBefore 和 compactAfter 集合中
         trySyncLatestCompaction(waitCompaction);
         // 3. 将 newFiles、compactBefore、compactAfter 等集合中的文件元数据打包成一个 CommitIncrement 对象（最终会被上层的 Committer 用来生成 Manifest 文件和 Snapshot）。同时清空这些集合，为下一个 Checkpoint 做准备
         return drainIncrement();

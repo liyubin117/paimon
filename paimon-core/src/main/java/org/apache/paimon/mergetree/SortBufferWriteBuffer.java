@@ -164,7 +164,7 @@ public class SortBufferWriteBuffer implements WriteBuffer {
         return buffer.flushMemory();
     }
 
-    // 数据从缓冲区读出并处理的核心方法，在缓冲区刷盘（Flush）时被调用
+    // 数据从缓冲区、spill区读出并处理的核心方法，在缓冲区刷盘（Flush）时被调用
     @Override
     public void forEach(
             Comparator<InternalRow> keyComparator,

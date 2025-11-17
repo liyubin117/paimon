@@ -41,7 +41,12 @@ import java.util.Optional;
 
 import static org.apache.paimon.format.parquet.ParquetFileFormatFactory.IDENTIFIER;
 
-/** Parquet {@link FileFormat}. */
+/** Parquet {@link FileFormat}.
+ * 宏观上按行分组成行组 (Row Group)，这是读写的基本单元，便于数据并行处理和管理。
+ * 行组内部按列组织成列块 (Column Chunk)，这是列式存储的核心，实现了按需读取。
+ * 列块内部按页组织成数据页 (Data Page)，这是压缩和编码的基本单元，极致地优化了存储效率。
+ * 丰富的元数据和统计信息，贯穿于file(row group)、column chunk、page header三个层级，为查询优化（如谓词下推）提供了强大的支持
+ * */
 public class ParquetFileFormat extends FileFormat {
 
     private final Options options;
