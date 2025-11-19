@@ -38,6 +38,9 @@ public class MysqlDistributedLockDialect extends AbstractDistributedLockDialect 
                 + ")";
     }
 
+    /**
+     * 通过写入paimon_distributed_locks表（lock_id，expire_time_seconds）产生行锁，锁定特定lock_id
+     */
     @Override
     public String getLockAcquireSql() {
         return "INSERT INTO "

@@ -95,12 +95,13 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
 
     public CleanOrphanFilesResult clean()
             throws IOException, ExecutionException, InterruptedException {
+        // 1. 验证分支有效性
         List<String> branches = validBranches();
 
-        // specially handle to clear snapshot dir
+        // 2. 特殊处理快照目录清理
         cleanSnapshotDir(branches, deleteFiles::add, deletedFilesLenInBytes::addAndGet);
 
-        // get candidate files
+        // 3. 获取候选删除文件（按时间过滤）
         Map<String, Pair<Path, Long>> candidates = getCandidateDeletingFiles();
         if (candidates.isEmpty()) {
             return new CleanOrphanFilesResult(
@@ -108,13 +109,13 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
         }
         candidateDeletes = new HashSet<>(candidates.keySet());
 
-        // find used files
+        // 4. 并行收集所有使用的文件
         Set<String> usedFiles =
                 branches.stream()
                         .flatMap(branch -> getUsedFiles(branch).stream())
                         .collect(Collectors.toSet());
 
-        // delete unused files
+        // 5. 计算孤儿文件（候删文件-用到文件）并删除
         candidateDeletes.removeAll(usedFiles);
         candidateDeletes.stream()
                 .map(candidates::get)
@@ -130,7 +131,7 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
                         .collect(Collectors.toList()));
         candidateDeletes.clear();
 
-        // clean empty directory
+        // 6. 清理空目录
         if (!dryRun) {
             cleanEmptyDataDirectory(deleteFiles);
         }
@@ -143,19 +144,22 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
         if (deleteFiles.isEmpty()) {
             return;
         }
+        // 收集bucket目录
         Set<Path> bucketDirs =
                 deleteFiles.stream()
                         .map(Path::getParent)
                         .filter(path -> path.toUri().toString().contains(BUCKET_PATH_PREFIX))
                         .collect(Collectors.toSet());
+        // 并行清理空bucket目录
         randomlyOnlyExecute(executor, this::tryDeleteEmptyDirectory, bucketDirs);
 
-        // Clean partition directory individually to avoiding conflicts
+        // 逐级向上清理空分区目录
         Set<Path> partitionDirs =
                 bucketDirs.stream().map(Path::getParent).collect(Collectors.toSet());
         tryCleanDataDirectory(partitionDirs, partitionKeysNum);
     }
 
+    // 从快照元数据收集
     private void collectWithoutDataFile(
             String branch, Consumer<String> usedFileConsumer, Consumer<String> manifestConsumer)
             throws IOException {
@@ -178,7 +182,9 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
                 table.switchToBranch(branch).store().manifestFileFactory().create();
         try {
             Set<String> manifests = ConcurrentHashMap.newKeySet();
+            // 从快照元数据收集
             collectWithoutDataFile(branch, usedFiles::add, manifests::add);
+            // 从清单文件收集
             randomlyOnlyExecute(
                     executor,
                     manifestName -> {
@@ -297,6 +303,7 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
         return orphanFilesCleans;
     }
 
+    // 数据库级别批量清理
     public static CleanOrphanFilesResult executeDatabaseOrphanFiles(
             Catalog catalog,
             String databaseName,
@@ -305,13 +312,17 @@ public class LocalOrphanFilesClean extends OrphanFilesClean {
             @Nullable Integer parallelism,
             boolean dryRun)
             throws Catalog.DatabaseNotExistException, Catalog.TableNotExistException {
+        // 创建多个表的清理器
         List<LocalOrphanFilesClean> tableCleans =
                 createOrphanFilesCleans(
                         catalog, databaseName, tableName, olderThanMillis, parallelism, dryRun);
 
-        ExecutorService executorService =
-                Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        List<Future<CleanOrphanFilesResult>> tasks = new ArrayList<>(tableCleans.size());
+        // 使用线程池并行处理多个表
+        ExecutorService executorService = Executors.newFixedThreadPool(
+                Runtime.getRuntime().availableProcessors());
+
+        // 提交清理任务并收集结果
+        List<Future<CleanOrphanFilesResult>> tasks = new ArrayList<>();
         for (LocalOrphanFilesClean clean : tableCleans) {
             tasks.add(executorService.submit(clean::clean));
         }

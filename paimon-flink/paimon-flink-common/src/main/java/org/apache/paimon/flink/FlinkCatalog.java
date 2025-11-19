@@ -172,7 +172,13 @@ import static org.apache.paimon.flink.utils.TableStatsUtil.createTableStats;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 import static org.apache.paimon.utils.Preconditions.checkNotNull;
 
-/** Catalog for paimon. */
+/** Catalog for paimon.
+ * 采用适配器模式，内部包装了 Paimon 的 Catalog 实例，将 Flink 的 Catalog 操作转换为 Paimon 的 Catalog 操作，本身无catalog相关操作逻辑
+ * 元数据管理：数据库、表、视图、函数的创建、删除、修改
+ * 表操作：表的查询、分区管理、统计信息
+ * 权限控制：数据库和表的访问控制
+ * 集成能力：与 Flink SQL 引擎深度集成
+ * */
 public class FlinkCatalog extends AbstractCatalog {
 
     public static final String DIALECT = "flink";
@@ -226,7 +232,7 @@ public class FlinkCatalog extends AbstractCatalog {
 
     @Override
     public List<String> listDatabases() throws CatalogException {
-        return catalog.listDatabases();
+        return catalog.listDatabases(); // 直接委托给paimon catalog
     }
 
     @Override
@@ -406,6 +412,7 @@ public class FlinkCatalog extends AbstractCatalog {
                 }
             }
             catalog.dropTable(toIdentifier(tablePath), ignoreIfNotExists);
+            // 日志系统自动注册
             if (logStoreAutoRegister && table != null) {
                 unRegisterLogSystem(identifier, table.options(), classLoader);
             }
@@ -483,6 +490,7 @@ public class FlinkCatalog extends AbstractCatalog {
         }
     }
 
+    // 支持物化表
     private static void fillOptionsForMaterializedTable(
             CatalogMaterializedTable mt, Map<String, String> options) {
         Options mtOptions = new Options();
@@ -936,6 +944,9 @@ public class FlinkCatalog extends AbstractCatalog {
         }
     }
 
+    /**
+     * 把paimon表转换成flink表
+     */
     private CatalogBaseTable toCatalogTable(Table table) {
         Map<String, String> newOptions = new HashMap<>(table.options());
 
@@ -943,7 +954,7 @@ public class FlinkCatalog extends AbstractCatalog {
                 org.apache.flink.table.api.Schema.newBuilder();
         Map<String, String> nonPhysicalColumnComments = new HashMap<>();
 
-        // add columns
+        // 构建列信息
         List<RowType.RowField> physicalRowFields = toLogicalType(table.rowType()).getFields();
         List<String> physicalColumns = table.rowType().getFieldNames();
         int columnCount =
@@ -973,7 +984,7 @@ public class FlinkCatalog extends AbstractCatalog {
             deserializeWatermarkSpec(newOptions, builder);
         }
 
-        // add primary keys
+        // 设置主键
         if (table.primaryKeys().size() > 0) {
             builder.primaryKey(table.primaryKeys());
         }
@@ -1044,6 +1055,9 @@ public class FlinkCatalog extends AbstractCatalog {
                 : decodeBase64ToBytes(refreshHandlerBytes);
     }
 
+    /**
+     * 从flink表提取出paimon schema
+     */
     public static Schema fromCatalogTable(CatalogBaseTable catalogTable) {
         ResolvedSchema schema =
                 ((ResolvedCatalogBaseTable<CatalogBaseTable>) catalogTable).getResolvedSchema();
@@ -1096,6 +1110,9 @@ public class FlinkCatalog extends AbstractCatalog {
         return columnOptions;
     }
 
+    /**
+     * 把flink对象标识符换成paimon的
+     */
     public static Identifier toIdentifier(ObjectPath path) {
         return new Identifier(path.getDatabaseName(), path.getObjectName());
     }

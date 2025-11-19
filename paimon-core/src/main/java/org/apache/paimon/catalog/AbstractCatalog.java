@@ -73,14 +73,20 @@ import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 import static org.apache.paimon.options.CatalogOptions.LOCK_ENABLED;
 import static org.apache.paimon.options.CatalogOptions.LOCK_TYPE;
 
-/** Common implementation of {@link Catalog}. */
+/** Common implementation of {@link Catalog}.
+ * Paimon 数据湖框架中 Catalog 系统的核心抽象基类，它实现了 Catalog 接口（Paimon 自己在Flink Catalog之外定义的接口），为所有 Catalog 实现提供了统一的模板和公共逻辑
+ *
+ * 文件系统 Catalog：FileSystemCatalog
+ * Hive Catalog：HiveCatalog
+ * JDBC Catalog：各种数据库实现的 Catalog
+ * */
 public abstract class AbstractCatalog implements Catalog {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractCatalog.class);
 
-    protected final FileIO fileIO;
-    protected final Map<String, String> tableDefaultOptions;
-    protected final Options catalogOptions;
+    protected final FileIO fileIO; // 文件系统操作
+    protected final Map<String, String> tableDefaultOptions; // 表默认配置
+    protected final Options catalogOptions; // Catalog配置选项
 
     protected AbstractCatalog(FileIO fileIO) {
         this.fileIO = fileIO;
@@ -109,6 +115,13 @@ public abstract class AbstractCatalog implements Catalog {
         return fileIO;
     }
 
+    /**
+     * 并发控制与锁机制
+     * 并发策略：
+     *  支持可插拔的锁工厂（CatalogLockFactory）
+     *  对象存储默认启用锁机制
+     *  通过 SPI 机制加载锁实现
+     */
     public Optional<CatalogLockFactory> lockFactory() {
         if (!lockEnabled()) {
             return Optional.empty();
@@ -150,7 +163,7 @@ public abstract class AbstractCatalog implements Catalog {
     @Override
     public void createDatabase(String name, boolean ignoreIfExists, Map<String, String> properties)
             throws DatabaseAlreadyExistException {
-        checkNotSystemDatabase(name);
+        checkNotSystemDatabase(name); // 确保不是系统数据库
         try {
             getDatabase(name);
             if (ignoreIfExists) {
@@ -369,9 +382,10 @@ public abstract class AbstractCatalog implements Catalog {
         validateCreateTable(schema);
         validateCustomTablePath(schema.options());
 
-        // check db exists
+        // 检查数据库是否存在
         getDatabase(identifier.getDatabaseName());
 
+        // 检查表是否已存在
         try {
             getTable(identifier);
             if (ignoreIfExists) {
@@ -383,15 +397,16 @@ public abstract class AbstractCatalog implements Catalog {
 
         copyTableDefaultOptions(schema.options());
 
+        // 根据表类型创建不同的表
         switch (Options.fromMap(schema.options()).get(TYPE)) {
-            case TABLE:
-            case MATERIALIZED_TABLE:
+            case TABLE: // 数据表
+            case MATERIALIZED_TABLE: // 物化表
                 createTableImpl(identifier, schema);
                 break;
-            case FORMAT_TABLE:
+            case FORMAT_TABLE: // 格式表
                 createFormatTable(identifier, schema);
                 break;
-            case OBJECT_TABLE:
+            case OBJECT_TABLE: // 对象表
                 throw new UnsupportedOperationException(
                         String.format(
                                 "Catalog %s cannot support object tables.",
@@ -645,7 +660,7 @@ public abstract class AbstractCatalog implements Catalog {
     }
 
     // =============================== Meta in File System =====================================
-
+    // 在文件系统中列出数据库
     protected List<String> listDatabasesInFileSystem(Path warehouse) throws IOException {
         List<String> databases = new ArrayList<>();
         for (FileStatus status : fileIO.listDirectories(warehouse)) {
@@ -667,16 +682,16 @@ public abstract class AbstractCatalog implements Catalog {
         }
         return tables;
     }
-
+    // 检查表在文件系统中是否存在
     protected boolean tableExistsInFileSystem(Path tablePath, String branchName) {
         SchemaManager schemaManager = new SchemaManager(fileIO, tablePath, branchName);
 
-        // in order to improve the performance, check the schema-0 firstly.
+        // 性能优化：优先检查schema-0
         boolean schemaZeroExists = schemaManager.schemaExists(0);
         if (schemaZeroExists) {
             return true;
         } else {
-            // if schema-0 not exists, fallback to check other schemas
+            // schema-0不存在时，检查其他schema
             return !schemaManager.listAllIds().isEmpty();
         }
     }

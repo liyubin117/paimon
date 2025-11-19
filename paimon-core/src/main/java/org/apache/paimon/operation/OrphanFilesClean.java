@@ -71,6 +71,19 @@ import static org.apache.paimon.utils.StringUtils.isNullOrWhitespaceOnly;
 /**
  * To remove the data files and metadata files that are not used by table (so-called "orphan
  * files").
+ * 设计目标：
+ * 清理未被表引用的"孤儿文件"，释放存储空间
+ * 避免误删正在写入的新文件（通过时间阈值控制）
+ * 处理并发场景下的文件冲突问题
+ * 支持本地和分布式两种清理模式
+
+ *
+     OrphanFilesClean (抽象类，抽象基类定义核心算法)
+     ↓
+     LocalOrphanFilesClean (本地实现，使用线程池)
+     ↓
+     FlinkOrphanFilesClean / SparkOrphanFilesClean (分布式实现)
+
  *
  * <p>It will ignore exception when listing all files because it's OK to not delete unread files.
  *
@@ -110,6 +123,7 @@ public abstract class OrphanFilesClean implements Serializable {
         List<String> branches = table.branchManager().branches();
         branches.add(DEFAULT_MAIN_BRANCH);
 
+        // 检查异常分支（没有schema的分支）
         List<String> abnormalBranches = new ArrayList<>();
         for (String branch : branches) {
             SchemaManager schemaManager = table.schemaManager().copyWithBranch(branch);
@@ -216,15 +230,21 @@ public abstract class OrphanFilesClean implements Serializable {
         cleanFile(filePath);
     }
 
+    /**
+     * 文件删除策略与错误处理
+     *  使用 deleteQuietly 方法，删除失败时不抛出异常
+     *  避免因为个别文件删除失败而中断整个清理流程
+     *  通过 dryRun 模式支持预演，不实际删除文件
+     */
     protected void cleanFile(Path path) {
         if (!dryRun) {
             try {
                 if (fileIO.isDir(path)) {
-                    fileIO.deleteDirectoryQuietly(path);
+                    fileIO.deleteDirectoryQuietly(path); // 静默删除目录
                 } else {
-                    fileIO.deleteQuietly(path);
+                    fileIO.deleteQuietly(path); // 静默删除文件
                 }
-            } catch (IOException ignored) {
+            } catch (IOException ignored) { // 忽略删除异常，避免阻塞清理流程
             }
         }
     }
@@ -417,6 +437,9 @@ public abstract class OrphanFilesClean implements Serializable {
     }
 
     /**
+     * 文件读取重试机制，区别对待FileNotFoundException 和其他 IOException
+     *  文件不存在时返回默认值，避免阻塞清理流程
+     *  其他IO异常进行重试，提高容错性
      * Retry reading files when {@link IOException} was thrown by the reader. If the exception is
      * {@link FileNotFoundException}, return default value. Finally, if retry times reaches the
      * limits, rethrow the IOException.
@@ -425,25 +448,31 @@ public abstract class OrphanFilesClean implements Serializable {
             throws IOException {
         int retryNumber = 0;
         IOException caught = null;
-        while (retryNumber++ < READ_FILE_RETRY_NUM) {
+        while (retryNumber++ < READ_FILE_RETRY_NUM) { // 最多重试3次
             try {
                 return reader.get();
             } catch (FileNotFoundException e) {
-                return defaultValue;
+                return defaultValue; // 文件不存在返回默认值
             } catch (IOException e) {
-                caught = e;
+                caught = e; // 记录异常继续重试
             }
             try {
-                TimeUnit.MILLISECONDS.sleep(READ_FILE_RETRY_INTERVAL);
+                TimeUnit.MILLISECONDS.sleep(READ_FILE_RETRY_INTERVAL); // 间隔100ms
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
             }
         }
 
-        throw caught;
+        throw caught; // 超过重试次数抛出异常
     }
 
+    /**
+     * 时间窗口保护机制：
+     *  默认只清理1天前的文件，避免误删正在写入的文件
+     *  支持用户自定义时间阈值
+     *  强制校验时间必须早于当前时间
+     */
     protected boolean oldEnough(FileStatus status) {
         return status.getModificationTime() < olderThanMillis;
     }
@@ -452,6 +481,7 @@ public abstract class OrphanFilesClean implements Serializable {
         if (isNullOrWhitespaceOnly(olderThan)) {
             return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
         } else {
+            // 解析用户指定的时间戳
             Timestamp parsedTimestampData =
                     DateTimeUtils.parseTimestampData(olderThan, 3, TimeZone.getDefault());
             Preconditions.checkArgument(

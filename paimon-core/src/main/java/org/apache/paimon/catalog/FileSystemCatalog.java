@@ -37,7 +37,16 @@ import java.util.concurrent.Callable;
 
 import static org.apache.paimon.options.CatalogOptions.CASE_SENSITIVE;
 
-/** A catalog implementation for {@link FileIO}. */
+/** A catalog implementation for {@link FileIO}.
+ * warehouse/
+ * ├── database1/
+ * │   ├── table1/
+ * │   │   ├── schema/          # 表结构
+ * │   │   ├── snapshot/        # 快照信息
+ * │   │   └── manifest/        # 清单文件
+ * │   └── table2/
+ * └── database2/
+ * */
 public class FileSystemCatalog extends AbstractCatalog {
 
     private static final Logger LOG = LoggerFactory.getLogger(FileSystemCatalog.class);

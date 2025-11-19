@@ -72,7 +72,27 @@ import static org.apache.paimon.jdbc.JdbcUtils.updateTable;
  * Software Foundation (ASF) under the Apache License, Version 2.0. See the NOTICE file distributed with this work for
  * additional information regarding copyright ownership. */
 
-/** Support jdbc catalog. */
+/** Support jdbc catalog.
+ * paimon_tables表 - 存储表元数据
+ * CREATE TABLE paimon_tables (
+ *     catalog_key VARCHAR(255) NOT NULL,       -- Catalog 标识
+ *     database_name VARCHAR(255) NOT NULL,     -- 数据库名
+ *     table_name VARCHAR(255) NOT NULL,        -- 表名
+ *     PRIMARY KEY (catalog_key, database_name, table_name)
+ * )
+ *
+ * paimon_database_properties表 - 存储数据库属性
+ * CREATE TABLE paimon_database_properties (
+ *     catalog_key VARCHAR(255) NOT NULL,       -- Catalog 标识
+ *     database_name VARCHAR(255) NOT NULL,     -- 数据库名
+ *     property_key VARCHAR(255),               -- 属性键
+ *     property_value VARCHAR(1000),            -- 属性值
+ *     PRIMARY KEY (catalog_key, database_name, property_key)
+ * )
+ *
+ * paimon_distributed_lock表 - 分布式锁（可选）
+ * 当启用锁机制时创建，用于多客户端并发控制。
+ * */
 public class JdbcCatalog extends AbstractCatalog {
 
     private static final Logger LOG = LoggerFactory.getLogger(JdbcCatalog.class);
@@ -80,10 +100,10 @@ public class JdbcCatalog extends AbstractCatalog {
     public static final String PROPERTY_PREFIX = "jdbc.";
     private static final String DATABASE_EXISTS_PROPERTY = "exists";
 
-    private final JdbcClientPool connections;
-    private final String catalogKey;
-    private final Options options;
-    private final String warehouse;
+    private final JdbcClientPool connections;  // JDBC 连接池
+    private final String catalogKey;           // Catalog 标识符
+    private final Options options;             // 配置选项
+    private final String warehouse;            // 数据仓库路径
 
     protected JdbcCatalog(FileIO fileIO, String catalogKey, Options options, String warehouse) {
         super(fileIO, options);
@@ -92,12 +112,12 @@ public class JdbcCatalog extends AbstractCatalog {
         this.warehouse = warehouse;
         Preconditions.checkNotNull(options, "Invalid catalog properties: null");
         this.connections =
-                new JdbcClientPool(
+                new JdbcClientPool( // 初始化连接池
                         options.get(CatalogOptions.CLIENT_POOL_SIZE),
                         options.get(CatalogOptions.URI.key()),
                         options.toMap());
         try {
-            initializeCatalogTablesIfNeed();
+            initializeCatalogTablesIfNeed(); // 初始化数据库表结构
         } catch (SQLException e) {
             throw new RuntimeException("Cannot initialize JDBC catalog", e);
         } catch (InterruptedException e) {
@@ -261,6 +281,7 @@ public class JdbcCatalog extends AbstractCatalog {
     @Override
     protected void dropTableImpl(Identifier identifier, List<Path> externalPaths) {
         try {
+            // 1. 删除元数据记录
             int deletedRecords =
                     execute(
                             connections,
@@ -275,9 +296,11 @@ public class JdbcCatalog extends AbstractCatalog {
             }
             Path path = getTableLocation(identifier);
             try {
+                // 2. 清理文件系统
                 if (fileIO.exists(path)) {
                     fileIO.deleteDirectoryQuietly(path);
                 }
+                // 3. 清理外部路径
                 for (Path externalPath : externalPaths) {
                     if (fileIO.exists(externalPath)) {
                         fileIO.deleteDirectoryQuietly(externalPath);
@@ -291,13 +314,16 @@ public class JdbcCatalog extends AbstractCatalog {
         }
     }
 
+    /**
+     * 创建表：双写一致性 + 失败回滚 + 分布式锁
+     */
     @Override
     protected void createTableImpl(Identifier identifier, Schema schema) {
         try {
-            // create table file
+            // 1. 先写文件系统
             SchemaManager schemaManager = getSchemaManager(identifier);
             runWithLock(identifier, () -> schemaManager.createTable(schema));
-            // Update schema metadata
+            // 2. 再更新元数据表
             Path path = getTableLocation(identifier);
             int insertRecord =
                     connections.run(
@@ -314,6 +340,7 @@ public class JdbcCatalog extends AbstractCatalog {
             if (insertRecord == 1) {
                 LOG.debug("Successfully committed to new table: {}", identifier);
             } else {
+                // 3. 失败回滚机制
                 try {
                     fileIO.deleteDirectoryQuietly(path);
                 } catch (Exception ee) {
@@ -332,9 +359,9 @@ public class JdbcCatalog extends AbstractCatalog {
     @Override
     protected void renameTableImpl(Identifier fromTable, Identifier toTable) {
         try {
-            // update table metadata info
+            // 1. 更新元数据表
             updateTable(connections, catalogKey, fromTable, toTable);
-
+            // 2. 重命名文件目录
             Path fromPath = getTableLocation(fromTable);
             if (!new SchemaManager(fileIO, fromPath).listAllIds().isEmpty()) {
                 // Rename the file system's table directory. Maintain consistency between tables in
