@@ -37,7 +37,7 @@ public class JdbcClientPool extends ClientPool.ClientPoolImpl<Connection, SQLExc
     private final String protocol;
 
     public JdbcClientPool(int poolSize, String dbUrl, Map<String, String> props) {
-        super(poolSize, clientSupplier(dbUrl, props));
+        super(poolSize, clientSupplier(dbUrl, props)); // 关键点：传入客户端供应商
         Matcher matcher = PROTOCOL_PATTERN.matcher(dbUrl);
         if (matcher.matches()) {
             this.protocol = matcher.group(1);
@@ -51,7 +51,7 @@ public class JdbcClientPool extends ClientPool.ClientPoolImpl<Connection, SQLExc
             try {
                 Properties dbProps =
                         JdbcUtils.extractJdbcConfiguration(props, JdbcCatalog.PROPERTY_PREFIX);
-                return DriverManager.getConnection(dbUrl, dbProps);
+                return DriverManager.getConnection(dbUrl, dbProps); // 实际的数据库连接创建
             } catch (SQLException e) {
                 throw new RuntimeException(String.format("Failed to connect: %s", dbUrl), e);
             }

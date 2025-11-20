@@ -37,7 +37,11 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-/** Util for jdbc catalog. */
+/** Util for jdbc catalog.
+ * SQL常量定义：定义了paimon_tables、paimon_database_properties、paimon_distributed_locks等表的创建和查询SQL
+ * 基础CRUD操作：提供单条记录的增删改查方法
+ * 连接池集成：通过JdbcClientPool执行SQL操作
+ * */
 public class JdbcUtils {
     private static final Logger LOG = LoggerFactory.getLogger(JdbcUtils.class);
     public static final String CATALOG_TABLE_NAME = "paimon_tables";
@@ -354,6 +358,7 @@ public class JdbcUtils {
         return execute(err -> {}, connections, sql, args);
     }
 
+    // 通用的 SQL 执行方法
     public static int execute(
             Consumer<SQLException> sqlErrorHandler,
             JdbcClientPool connections,
