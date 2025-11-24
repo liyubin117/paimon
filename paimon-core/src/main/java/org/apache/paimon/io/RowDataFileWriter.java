@@ -41,15 +41,17 @@ import static org.apache.paimon.io.DataFilePathFactory.dataFileToFileIndexPath;
 /**
  * A {@link StatsCollectingSingleFileWriter} to write data files containing {@link InternalRow}.
  * Also produces {@link DataFileMeta} after writing a file.
+ *
+ * 专门用于将 InternalRow 写入数据文件，写入完成后生成 DataFileMeta（包含文件路径、大小、记录数和统计信息等元数据）
  */
 public class RowDataFileWriter extends StatsCollectingSingleFileWriter<InternalRow, DataFileMeta> {
 
-    private final long schemaId;
-    private final LongCounter seqNumCounter;
-    private final boolean isExternalPath;
-    private final SimpleStatsConverter statsArraySerializer;
-    @Nullable private final DataFileIndexWriter dataFileIndexWriter;
-    private final FileSource fileSource;
+    private final long schemaId; // 数据 schema 版本 ID
+    private final LongCounter seqNumCounter; // 序列号计数器，用于跟踪写入记录数
+    private final boolean isExternalPath; //是否为外部存储路径
+    private final SimpleStatsConverter statsArraySerializer; // 统计信息序列化器
+    @Nullable private final DataFileIndexWriter dataFileIndexWriter; // 数据文件索引写入器（可为 null）
+    private final FileSource fileSource; // 文件来源元数据
     @Nullable private final List<String> writeCols;
 
     public RowDataFileWriter(
@@ -77,6 +79,11 @@ public class RowDataFileWriter extends StatsCollectingSingleFileWriter<InternalR
         this.writeCols = writeCols;
     }
 
+    /**
+     * 1.调用父类方法写入原始数据
+     * 2.通过 dataFileIndexWriter 写入索引信息（与之前分析的 IndexMaintainer 关联）
+     * 3.递增序列号计数器
+     */
     @Override
     public void write(InternalRow row) throws IOException {
         super.write(row);
@@ -87,6 +94,9 @@ public class RowDataFileWriter extends StatsCollectingSingleFileWriter<InternalR
         seqNumCounter.add(1L);
     }
 
+    /**
+     * 先关闭索引写入器，再关闭父类资源
+     */
     @Override
     public void close() throws IOException {
         if (dataFileIndexWriter != null) {
@@ -95,6 +105,15 @@ public class RowDataFileWriter extends StatsCollectingSingleFileWriter<InternalR
         super.close();
     }
 
+    /**
+     * 收集文件统计信息（大小、记录数、索引数据）
+     * 生成 DataFileMeta 对象，包含：
+     *  文件基本信息（名称、大小、记录数）
+     *  统计信息（通过 SimpleStatsConverter 序列化）
+     *  索引信息（独立索引文件路径或内嵌索引字节）
+     *  序列号范围（起始/结束序列号）
+     *  schema 版本和文件来源信息
+     */
     @Override
     public DataFileMeta result() throws IOException {
         long fileSize = outputBytes;

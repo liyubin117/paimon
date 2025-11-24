@@ -26,9 +26,10 @@ import java.util.Iterator;
 
 /**
  * File writer to accept one record or a branch of records and generate metadata after closing it.
+ * 顶层接口，定义文件写入的基本操作（如 write、abort 和 result）
  *
- * @param <T> record type.
- * @param <R> file result to collect.
+ * @param <T> record type. 写入的记录类型
+ * @param <R> file result to collect. 写入完成后的结果类型
  */
 public interface FileWriter<T, R> extends Closeable {
 
@@ -106,6 +107,8 @@ public interface FileWriter<T, R> extends Closeable {
      */
     void abort();
 
-    /** @return the result for this closed file writer. */
+    /** @return the result for this closed file writer.
+     * 抽象方法，由子类实现。文件关闭后生成并返回写入结果 R（如 DataFileMeta 元数据）。
+     * */
     R result() throws IOException;
 }

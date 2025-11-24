@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/** Newly created data files and changelog files. */
+/** Newly created data files and changelog files.
+ * 表示一次提交中数据文件的新增
+ * */
 public class DataIncrement {
 
     private final List<DataFileMeta> newFiles;

@@ -40,7 +40,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
-/** Reads {@link InternalRow} from data files. */
+/** Reads {@link InternalRow} from data files.
+ * 负责从数据文件中读取 InternalRow，被 KeyValueFileReaderFactory 在内部使用
+ * */
 public class DataFileRecordReader implements FileRecordReader<InternalRow> {
 
     private final RowType tableRowType;

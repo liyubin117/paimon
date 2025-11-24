@@ -30,7 +30,9 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 
-/** {@link RecordReader} for reading {@link KeyValue} data files. */
+/** {@link RecordReader} for reading {@link KeyValue} data files.
+ * 适配器模式，包装 DataFileRecordReader，通过 KeyValueSerializer#fromRow 将读取到的 InternalRow 转换成 KeyValue 对象，供上层调用。
+ * */
 public class KeyValueDataFileRecordReader implements FileRecordReader<KeyValue> {
 
     private final FileRecordReader<InternalRow> reader;

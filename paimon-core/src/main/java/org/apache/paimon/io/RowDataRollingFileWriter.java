@@ -36,7 +36,9 @@ import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
 
-/** {@link RollingFileWriter} for data files containing {@link InternalRow}. */
+/** {@link RollingFileWriter} for data files containing {@link InternalRow}.
+ * 专门用于滚动写入 InternalRow
+ * */
 public class RowDataRollingFileWriter extends RollingFileWriter<InternalRow, DataFileMeta> {
 
     public RowDataRollingFileWriter(
@@ -56,7 +58,7 @@ public class RowDataRollingFileWriter extends RollingFileWriter<InternalRow, Dat
             @Nullable List<String> writeCols) {
         super(
                 () ->
-                        new RowDataFileWriter(
+                        new RowDataFileWriter( // 创建并调用
                                 fileIO,
                                 createFileWriterContext(
                                         fileFormat, writeSchema, statsCollectors, fileCompression),

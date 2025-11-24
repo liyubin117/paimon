@@ -48,6 +48,11 @@ import static org.apache.paimon.utils.SerializationUtils.newStringType;
 
 /**
  * Metadata of a data file.
+ * 描述数据文件元数据的重要结构，包括：
+ *  文件名、文件大小、记录数
+ *  序列号范围、Schema ID
+ *  统计信息等
+ *  FileWriter 写入完成后返回此对象
  *
  * @since 0.9.0
  */

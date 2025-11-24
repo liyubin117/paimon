@@ -30,7 +30,9 @@ import static org.apache.paimon.utils.InternalRowUtils.toStringArrayData;
 import static org.apache.paimon.utils.SerializationUtils.deserializeBinaryRow;
 import static org.apache.paimon.utils.SerializationUtils.serializeBinaryRow;
 
-/** Serializer for {@link DataFileMeta}. */
+/** Serializer for {@link DataFileMeta}.
+ * 用于序列化和反序列化 DataFileMeta 对象
+ * */
 public class DataFileMetaSerializer extends ObjectSerializer<DataFileMeta> {
 
     private static final long serialVersionUID = 1L;

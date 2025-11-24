@@ -112,11 +112,14 @@ public abstract class KeyValueDataFileWriter
     public void write(KeyValue kv) throws IOException {
         super.write(kv);
 
+        // 只对value写入索引，即索引基于value列构建，因为查询通常是根据主键（key）进行点查或范围扫描，而对 value 列的过滤则需要索引来加速
         if (dataFileIndexWriter != null) {
             dataFileIndexWriter.write(kv.value());
         }
 
         keyKeeper.copyInto(kv.key());
+        // 因已假定所有写入的 KeyValue 记录已经根据 key 排序，不需要比较，直接取第一个key作为minKey
+        // 排序的逻辑被前置到了内存中的 MemTable 阶段，符合关注点分离的设计原则
         if (minKey == null) {
             minKey = keyKeeper.copiedRow();
         }
@@ -167,7 +170,7 @@ public abstract class KeyValueDataFileWriter
                 fileSize,
                 recordCount(),
                 minKey,
-                keyKeeper.copiedRow(),
+                keyKeeper.copiedRow(), // 因已假定所有写入的 KeyValue 记录已经根据 key 排序，不需要比较，直接取最后一个key作为maxKey
                 keyStats,
                 valueStatsPair.getValue(),
                 minSeqNumber,
@@ -186,6 +189,9 @@ public abstract class KeyValueDataFileWriter
                 null);
     }
 
+    /**
+     * StatsCollectingSingleFileWriter 收集的是整行（InternalRow）的统计信息。KeyValueDataFileWriter 如何将这些整行的统计信息拆分回 key 和 value 各自的部分呢？它通过一个抽象方法 fetchKeyValueStats 将这个任务交给了子类去实现。因为只有子类才知道 KeyValue 是如何被转换和拼接成一个 InternalRow 的。
+     */
     abstract Pair<SimpleColStats[], SimpleColStats[]> fetchKeyValueStats(SimpleColStats[] rowStats);
 
     @Override

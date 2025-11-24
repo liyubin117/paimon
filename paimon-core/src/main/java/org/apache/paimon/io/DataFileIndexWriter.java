@@ -48,19 +48,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Index file writer for a data file. */
+/** Index file writer for a data file.
+ * 为数据文件创建并写入对应的索引（例如布隆过滤器、位图索引等）文件
+ * 通过索引可以快速跳过不包含目标数据的数据文件
+ * */
 public final class DataFileIndexWriter implements Closeable {
 
     public static final FileIndexResult EMPTY_RESULT = FileIndexResult.of(null, null);
 
     private final FileIO fileIO;
 
-    private final Path path;
+    private final Path path; // 指向即将生成的索引文件的路径
 
     // if the filter size greater than fileIndexInManifestThreshold, we put it in file
+    /**
+     * 一个非常重要的阈值，决定生成的索引是内嵌在 Manifest 文件中还是作为独立外部文件存储
+     *  如果索引总大小 ≤ 阈值，索引数据会序列化为embeddedIndexBytes字节数组，并记录在 DataFileMeta 中随 Manifest 文件持久化。
+     *  如果索引大小 > 阈值，索引会被写入独立文件（文件名记录在 resultFileName 中），避免 Manifest 文件过大
+     */
     private final long inManifestThreshold;
 
     // index type, column name -> index maintainer
+    // 管理当前数据文件需要维护的所有索引：key是索引类型（如bloom-filter、bitmap），value是一个map（key是列名，value是索引维护者）
     private final Map<String, Map<String, IndexMaintainer>> indexMaintainers = new HashMap<>();
 
     private String resultFileName;
@@ -148,6 +157,9 @@ public final class DataFileIndexWriter implements Closeable {
         this.inManifestThreshold = fileIndexOptions.fileIndexInManifestThreshold();
     }
 
+    /**
+     * 遍历所有 IndexMaintainer，调用它们的 write 方法，从 InternalRow 中提取目标列数据并更新索引状态
+     */
     public void write(InternalRow row) {
         indexMaintainers
                 .values()
@@ -156,6 +168,12 @@ public final class DataFileIndexWriter implements Closeable {
                                 column2maintainers.values().forEach(index -> index.write(row)));
     }
 
+    /**
+     * 数据文件写入完成后调用，用于持久化索引：
+     *  1.调用 serializeMaintainers() 将索引信息序列化为 Map<String, Map<String, byte[]>> 结构。
+     *  2.使用 FileIndexFormat.Writer 将结构写入 ByteArrayOutputStream，生成索引文件内容。
+     *  3.根据输出流大小与 inManifestThreshold 的比较，决定将索引存入 embeddedIndexBytes 或独立文件。
+     */
     @Override
     public void close() throws IOException {
         Map<String, Map<String, byte[]>> indexMaps = serializeMaintainers();
@@ -190,6 +208,9 @@ public final class DataFileIndexWriter implements Closeable {
         return indexMaps;
     }
 
+    /**
+     * 封装 close() 的产出（embeddedIndexBytes 或 resultFileName），最终记录在 DataFileMeta
+     */
     public FileIndexResult result() {
         return FileIndexResult.of(embeddedIndexBytes, resultFileName);
     }
@@ -237,13 +258,16 @@ public final class DataFileIndexWriter implements Closeable {
         }
     }
 
+    /**
+     * 某列的索引维护者
+     */
     interface IndexMaintainer {
 
         void write(InternalRow row);
 
         String getIndexType();
 
-        Map<String, byte[]> serializedBytes();
+        Map<String, byte[]> serializedBytes(); // 索引序列化后的结果，singleton map，键是列名，值是索引字节数组
     }
 
     /** One index maintainer for one column. */

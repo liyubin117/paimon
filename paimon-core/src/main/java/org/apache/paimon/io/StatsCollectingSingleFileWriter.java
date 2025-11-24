@@ -31,7 +31,7 @@ import java.util.stream.IntStream;
 
 /**
  * A {@link SingleFileWriter} which also produces statistics for each written field.
- * 一个在写入单个文件的同时包装了收集统计信息的写入器，写入数据文件时收集列统计信息的核心抽象类
+ * 一个在写入单个文件的同时包装了收集统计信息的写入器，写入数据文件时收集列统计信息（如最大值、最小值、空值计数等）的核心抽象类
  *
  * @param <T> type of records to write.
  * @param <R> type of result to produce after writing a file.

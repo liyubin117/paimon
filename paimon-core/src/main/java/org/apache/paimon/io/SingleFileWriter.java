@@ -101,11 +101,17 @@ public abstract class SingleFileWriter<T, R> implements FileWriter<T, R> {
         return path;
     }
 
+    /**
+     * 主要写入方法。内部调用 writeImpl，将一条记录写入文件。写入前检查写入器是否已关闭，写入后更新记录数。
+     */
     @Override
     public void write(T record) throws IOException {
         writeImpl(record);
     }
 
+    /**
+     * 优化的批量写入方法。如果底层 FormatWriter 支持（实现 BundleFormatWriter 接口），可批量写入以提升性能（尤其对列式存储格式如 Parquet）。否则退化为逐条写入。
+     */
     public void writeBundle(BundleRecords bundle) throws IOException {
         if (closed) {
             throw new RuntimeException("Writer has already closed!");

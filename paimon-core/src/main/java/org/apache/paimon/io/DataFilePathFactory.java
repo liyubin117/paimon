@@ -34,7 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 import static org.apache.paimon.utils.StringUtils.isEmpty;
 
-/** Factory which produces new {@link Path}s for data files. */
+/** Factory which produces new {@link Path}s for data files.
+ * 生成数据文件的路径和文件名
+ * */
 @ThreadSafe
 public class DataFilePathFactory {
 

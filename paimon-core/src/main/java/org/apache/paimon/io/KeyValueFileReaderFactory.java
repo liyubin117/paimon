@@ -54,7 +54,11 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-/** Factory to create {@link RecordReader}s for reading {@link KeyValue} files. */
+/** Factory to create {@link RecordReader}s for reading {@link KeyValue} files.
+ * 专门用于读取 KeyValue 类型的数据
+ * 支持根据不同的文件格式（如 Orc、Parquet）和数据模式（Schema）创建相应的 RecordReader
+ * 支持异步读取和删除向量（Deletion Vector）的应用，以提高读取性能和处理数据删除
+ * */
 public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
 
     private final FileIO fileIO;

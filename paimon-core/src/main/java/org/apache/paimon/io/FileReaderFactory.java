@@ -22,7 +22,10 @@ import org.apache.paimon.reader.RecordReader;
 
 import java.io.IOException;
 
-/** Factory to read records from file. */
+/** Factory to read records from file.
+ * paimon实现io中的读的核心顶层接口
+ * 定义了创建 RecordReader 的工厂方法。所有具体的文件读取器工厂都必须实现这个接口
+ * */
 public interface FileReaderFactory<T> {
 
     RecordReader<T> createRecordReader(DataFileMeta file) throws IOException;
