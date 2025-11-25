@@ -81,7 +81,16 @@ import static org.apache.paimon.flink.FlinkConnectorOptions.SCAN_BOUNDED;
 import static org.apache.paimon.flink.LogicalTypeConversion.toLogicalType;
 import static org.apache.paimon.flink.log.LogStoreTableFactory.discoverLogStoreFactory;
 
-/** Abstract paimon factory to create table source and table sink. */
+/** Abstract paimon factory to create table source and table sink.
+ * sql API链路
+ * 并不直接构建 Flink 的底层算子（Operator），比如写场景，是创建一个 FlinkTableSink 对象。这个 FlinkTableSink 对象知道如何根据表的配置，在真正执行作业时，通过 FlinkSinkBuilder 和 FlinkSink 来构建和提供 Paimon 特有的 Writer 和 Committer 算子
+ * 责任链模式：Factory -> Sink -> Builder -> Operator
+ * 具体：
+ * AbstractFlinkTableFactory (被 Flink 调用) -> new FlinkTableSink()
+ *  -> FlinkTableSink (被 Flink Planner 调用) -> new PaimonDataStreamSinkProvider()
+ *      -> Provider 内部调用 new FlinkSinkBuilder().build() -> Builder 调用 new SomeFlinkSink().sinkFrom()
+ *          -> FlinkSink.sinkFrom() 使用 transform API 将 Paimon 的 Writer 和 Committer 算子连接到 Flink 的数据流中
+ * */
 public abstract class AbstractFlinkTableFactory
         implements DynamicTableSourceFactory, DynamicTableSinkFactory {
 
@@ -120,6 +129,9 @@ public abstract class AbstractFlinkTableFactory
         }
     }
 
+    /**
+     * flink insert paimon表的流程起点
+     */
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
         return new FlinkTableSink(

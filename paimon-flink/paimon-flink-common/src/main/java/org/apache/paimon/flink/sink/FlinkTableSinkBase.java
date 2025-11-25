@@ -111,6 +111,9 @@ public abstract class FlinkTableSinkBase
         }
     }
 
+    /**
+     * FlinkTableSink创建后，Flink planner会调用此方法，包含构建DAG的真正逻辑
+     */
     @Override
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         if (overwrite && !context.isBounded()) {

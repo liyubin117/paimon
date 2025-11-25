@@ -94,6 +94,12 @@ public abstract class FlinkSink<T> implements Serializable {
         return sinkFrom(input, createCommitUser(table.coreOptions().toConfiguration()));
     }
 
+    /**
+     * paimon定义的写逻辑接入Flink DataStream
+     * 将数据流串联起两个核心的 Paimon 算子：
+     *  1.Writer Operator：负责接收上游数据，并将其写入到 Paimon 的数据文件（如 Parquet）中。写完后，它会向下游发送一个 Committable 对象，这个对象包含了新生成的文件名等元数据信息。
+     *  2.Committer Operator：这是一个全局单并发的算子，负责收集所有 Writer 发来的 Committable，并在 Checkpoint 成功时，将这些新文件信息“提交”到 Paimon 表，形成一个新的、可见的 Snapshot
+     */
     public DataStreamSink<?> sinkFrom(DataStream<T> input, String initialCommitUser) {
         // do the actually writing action, no snapshot generated in this stage
         DataStream<Committable> written = doWrite(input, initialCommitUser, null);

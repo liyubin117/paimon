@@ -42,7 +42,10 @@ import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.CatalogOptions.CACHE_ENABLED;
 
-/** Abstract base of {@link Action} for table. */
+/** Abstract base of {@link Action} for table.
+ * action API链路，主要用于执行特定的运维或DML操作
+ * ActionBase -> TableActionBase -> FlinkSinkBuilder
+ * */
 public abstract class ActionBase implements Action {
 
     protected final Options catalogOptions;
@@ -61,6 +64,7 @@ public abstract class ActionBase implements Action {
             catalogOptions.set(CACHE_ENABLED, false);
         }
 
+        // 初始化Catalog和FlinkCatalog
         catalog = initPaimonCatalog();
         flinkCatalog = initFlinkCatalog();
 

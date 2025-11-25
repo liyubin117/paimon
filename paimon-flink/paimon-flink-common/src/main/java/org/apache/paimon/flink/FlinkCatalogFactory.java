@@ -28,7 +28,14 @@ import java.util.Set;
 
 import static org.apache.paimon.flink.FlinkCatalogOptions.DEFAULT_DATABASE;
 
-/** Factory for {@link FlinkCatalog}. */
+/** Factory for {@link FlinkCatalog}.
+ * 创建flink paimon catalog时的入口类
+ *
+ * 调用链：
+ * Flink SQL -> CREATE CATALOG -> Flink 找到 FlinkCatalogFactory -> 创建 FlinkCatalog (桥梁)
+ *  -> SELECT/INSERT -> Flink Planner 通过 FlinkCatalog 的 getFactory() 拿到 FlinkTableFactory
+ *      -> FlinkTableFactory 创建出 Paimon 的 Source/Sink -> Source/Sink 在作业运行时提供具体的 Paimon Operator
+ * */
 public class FlinkCatalogFactory implements org.apache.flink.table.factories.CatalogFactory {
 
     public static final String IDENTIFIER = "paimon";
@@ -48,6 +55,9 @@ public class FlinkCatalogFactory implements org.apache.flink.table.factories.Cat
         return Collections.emptySet();
     }
 
+    /**
+     * 创建FlinkCatalog，是连接flink和paimon的桥梁，适配器模式
+     */
     @Override
     public FlinkCatalog createCatalog(Context context) {
         return createCatalog(

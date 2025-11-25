@@ -45,7 +45,7 @@ public abstract class TableActionBase extends ActionBase {
         super(catalogConfig);
         identifier = new Identifier(databaseName, tableName);
         try {
-            table = catalog.getTable(identifier);
+            table = catalog.getTable(identifier); // 获取Table对象
         } catch (Catalog.TableNotExistException e) {
             throw new RuntimeException(e);
         }
@@ -55,7 +55,7 @@ public abstract class TableActionBase extends ActionBase {
     public TableResult batchSink(DataStream<RowData> dataStream) {
         List<Transformation<?>> transformations =
                 Collections.singletonList(
-                        new FlinkSinkBuilder(table)
+                        new FlinkSinkBuilder(table) // 直接使用 table 创建 FlinkSinkBuilder
                                 .forRowData(dataStream)
                                 .build()
                                 .getTransformation());

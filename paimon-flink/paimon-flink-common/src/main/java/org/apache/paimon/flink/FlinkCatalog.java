@@ -225,6 +225,9 @@ public class FlinkCatalog extends AbstractCatalog {
         return catalog;
     }
 
+    /**
+     * 返回一个 FlinkTableFactory 的实例。这个 Factory 就是 Flink 用来创建表级的具体读（Source）/写（Sink）操作的工厂
+     */
     @Override
     public Optional<Factory> getFactory() {
         return Optional.of(new FlinkTableFactory(this));

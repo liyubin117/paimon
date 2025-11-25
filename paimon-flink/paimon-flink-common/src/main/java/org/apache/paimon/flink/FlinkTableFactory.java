@@ -35,7 +35,9 @@ import javax.annotation.Nullable;
 import static org.apache.paimon.CoreOptions.AUTO_CREATE;
 import static org.apache.paimon.flink.FlinkCatalogFactory.IDENTIFIER;
 
-/** A paimon {@link DynamicTableFactory} to create source and sink. */
+/** A paimon {@link DynamicTableFactory} to create source and sink.
+ * 构造出 Paimon 特有的 DataTableSource（用于读）和 PaimonDataStreamSinkProvider（用于写）。这些 Source 和 Sink 对象内部就包含了真正执行读写 Paimon 数据文件的运行时算子（Operator）逻辑
+ * */
 public class FlinkTableFactory extends AbstractFlinkTableFactory {
     public FlinkTableFactory() {
         this(null);

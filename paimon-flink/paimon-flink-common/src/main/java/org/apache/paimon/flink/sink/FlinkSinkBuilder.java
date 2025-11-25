@@ -66,6 +66,7 @@ import static org.apache.paimon.utils.Preconditions.checkState;
 
 /**
  * DataStream API for building Flink Sink.
+ * 建造者模式，根据表的各种配置（主键、分区、排序等）来选择并构造最合适的 Sink 实例
  *
  * @since 0.8
  */
@@ -74,17 +75,17 @@ public class FlinkSinkBuilder {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSinkBuilder.class);
 
-    protected final FileStoreTable table;
+    protected final FileStoreTable table; // 要写入的paimon表
 
-    private DataStream<RowData> input;
-    @Nullable protected Map<String, String> overwritePartition;
-    @Nullable private Integer parallelism;
-    @Nullable private TableSortInfo tableSortInfo;
+    private DataStream<RowData> input;  // 输入数据流
+    @Nullable protected Map<String, String> overwritePartition; // 指定覆盖写入的分区
+    @Nullable private Integer parallelism;  // sink并行度
+    @Nullable private TableSortInfo tableSortInfo;  // 存储表排序信息
 
     // ============== for extension ==============
 
-    protected boolean compactSink = false;
-    @Nullable protected LogSinkFunction logSinkFunction;
+    protected boolean compactSink = false;  // 是否压测sink
+    @Nullable protected LogSinkFunction logSinkFunction;    // 用于日志写入
 
     public FlinkSinkBuilder(Table table) {
         if (!(table instanceof FileStoreTable)) {
@@ -200,7 +201,19 @@ public class FlinkSinkBuilder {
         return this;
     }
 
-    /** Build {@link DataStreamSink}. */
+    /** Build {@link DataStreamSink}.
+     * 根据不同的桶模式，调用对应FlinkSink子类的sinkFrom()
+     * 1.设置并行度: 调用 setParallelismIfAdaptiveConflict 方法处理并行度设置。
+     * 2.尝试排序输入: 调用 trySortInput 方法对输入数据进行排序。
+     * 3.映射到内部行: 调用 mapToInternalRow 方法将 RowData映射为 InternalRow。
+     * 4.本地合并: 如果启用了本地合并，则进行本地合并操作。
+     * 5.根据桶模式构建 Sink:
+     *  POSTPONE_MODE: 调用 buildPostponeBucketSink方法。
+     *  HASH_FIXED: 调用 buildForFixedBucket方法。
+     *  HASH_DYNAMIC: 调用 buildDynamicBucketSink方法。
+     *  CROSS_PARTITION: 调用 buildDynamicBucketSink方法。
+     *  BUCKET_UNAWARE: 调用 buildUnawareBucketSink方法
+     * */
     public DataStreamSink<?> build() {
         setParallelismIfAdaptiveConflict();
         input = trySortInput(input);
