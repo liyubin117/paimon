@@ -55,6 +55,10 @@ import static org.apache.paimon.flink.utils.ParallelismUtils.forwardParallelism;
 
 /**
  * A {@link FlinkSink} which accepts {@link CdcRecord} and waits for a schema change if necessary.
+ * 专门用于处理 CDC（Change Data Capture）场景下的多表同步：
+ *  多表处理：它处理的是 CdcMultiplexRecord 类型的数据流，这种记录包含了表名和数据信息，可以路由到不同的表。
+ *  动态表创建：通过 CatalogLoader 可以在运行时动态创建和管理多个表。
+ *  适用场景：主要用于数据库同步场景，可以将一个源数据库中的多张表同步到 Paimon中对应的多张表
  */
 public class FlinkCdcMultiTableSink implements Serializable {
 
