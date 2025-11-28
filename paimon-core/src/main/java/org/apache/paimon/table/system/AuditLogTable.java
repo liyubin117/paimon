@@ -533,6 +533,9 @@ public class AuditLogTable implements DataTable, ReadonlyTable {
         }
     }
 
+    /**
+     * 包装StreamDataTableScan的适配器，使可以像查询普通数据表一样，流式查询audit_log系统表
+     */
     private class AuditLogStreamScan implements StreamDataTableScan {
 
         private final StreamDataTableScan streamScan;

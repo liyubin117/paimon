@@ -339,7 +339,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
 
         // 3. refresh lookup table
         if (shouldRefreshLookupTable()) {
-            lookupTable.refresh();
+            lookupTable.refresh(); // 对于主键表，调用 PrimaryKeyPartialLookupTable#refresh
             nextRefreshTime = System.currentTimeMillis() + refreshInterval.toMillis();
         }
     }

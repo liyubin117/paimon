@@ -73,14 +73,20 @@ import static org.apache.paimon.CoreOptions.IncrementalBetweenScanMode.DIFF;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 import static org.apache.paimon.utils.Preconditions.checkNotNull;
 
-/** An abstraction layer above {@link FileStoreScan} to provide input split generation. */
+/** An abstraction layer above {@link FileStoreScan} to provide input split generation.
+ * 扮演了一个“扫描任务协调者”的角色。它承接上层的扫描需求（通过 CoreOptions 和 with 方法），然后创建出具体的执行策略（StartingScanner），为后续真正的数据读取做准备
+ *
+ * 提供扫描配置的统一入口：它提供了一系列 with... 方法（如 withBucket, withPartitionFilter 等），允许上层调用者以链式调用的方式方便地设置各种扫描条件和过滤器。这为不同类型的扫描（批处理、流处理）提供了统一的配置接口。
+ * 作为扫描策略的工厂：其最核心的功能是根据用户在 CoreOptions 中设置的参数（例如 startup-mode, scan.snapshot-id 等），决定并创建出合适的起始扫描器 (StartingScanner)。StartingScanner 定义了从哪个快照（Snapshot）开始以及如何扫描数据。
+ * 抽象和封装底层细节：它封装了与 SnapshotReader 的交互细节。调用者不需要直接与 SnapshotReader 打交道，只需通过 AbstractDataTableScan 配置扫描即可。如 Javadoc 中所述，它是 FileStoreScan 之上的一个抽象层，用于提供输入切片（input split）的生成。
+ * */
 abstract class AbstractDataTableScan implements DataTableScan {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDataTableScan.class);
 
     protected final TableSchema schema;
-    private final CoreOptions options;
-    protected final SnapshotReader snapshotReader;
+    private final CoreOptions options; // 保存了所有与表相关的配置，是决定扫描行为的依据
+    protected final SnapshotReader snapshotReader; // 实际执行快照读取和文件过滤的组件
     private final TableQueryAuth queryAuth;
 
     @Nullable private RowType readType;
@@ -173,6 +179,19 @@ abstract class AbstractDataTableScan implements DataTableScan {
         return options;
     }
 
+    /**
+     * 创建扫描策略
+     * 根据 isStreaming 参数（判断是流模式还是批模式）以及 CoreOptions 中的配置，通过一个巨大的 switch 语句来创建不同的 StartingScanner 实例
+     *
+     * 1.判断扫描模式：首先会检查 stream-scan-mode，处理一些特殊的流式扫描，如 streaming-compact。
+     * 2.检查消费者ID：在流模式下，会尝试从 ConsumerManager 读取已保存的消费位点。
+     * 3.根据 startup-mode 创建扫描器：这是主要逻辑，不同的启动模式对应不同的 StartingScanner 实现。
+     *      LATEST_FULL: 从最新的快照进行全量扫描。
+     *      FROM_TIMESTAMP: 从指定的时间戳开始扫描。
+     *      FROM_SNAPSHOT: 从指定的快照ID开始扫描。
+     *      INCREMENTAL: 增量扫描，会调用 createIncrementalStartingScanner 方法处理更复杂的增量逻辑。
+     *      等等...
+     */
     protected StartingScanner createStartingScanner(boolean isStreaming) {
         SnapshotManager snapshotManager = snapshotReader.snapshotManager();
         ChangelogManager changelogManager = snapshotReader.changelogManager();

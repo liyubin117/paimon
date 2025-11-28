@@ -124,20 +124,34 @@ public interface SnapshotReader {
 
     Iterator<ManifestEntry> readFileIterator();
 
-    /** Result plan of this scan. */
+    /** Result plan of this scan.
+     * 是一份数据读取的执行计划，而不是数据本身
+     * */
     interface Plan extends TableScan.Plan {
 
+        /**
+         * 这个快照所携带的水印信息，用于事件时间处理
+         */
         @Nullable
         Long watermark();
 
         /**
          * Snapshot id of this plan, return null if the table is empty or the manifest list is
          * specified.
+         * 这个 Plan 是基于哪个快照版本生成的
          */
         @Nullable
         Long snapshotId();
 
-        /** Result splits. */
+        /**
+         * Splits (数据切分): 这是 Plan 最核心的内容。它是一个 Split 对象的列表，在 Paimon 中通常是 DataSplit。
+         *
+         * 每一个 DataSplit 代表一个独立的、可以被单个并发任务处理的工作单元。
+         * DataSplit 内部详细定义了：
+         *      分区信息 (Partition): 这批数据属于哪个分区。
+         *      桶ID (Bucket): 数据在哪个桶里。
+         *      数据文件列表 (Data Files): 具体要读取的一个或多个数据文件（如 Parquet/ORC 文件）的路径和元信息
+         */
         List<Split> splits();
 
         @SuppressWarnings({"unchecked", "rawtypes"})

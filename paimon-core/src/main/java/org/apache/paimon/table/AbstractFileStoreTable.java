@@ -276,7 +276,7 @@ abstract class AbstractFileStoreTable implements FileStoreTable {
 
     @Override
     public StreamDataTableScan newStreamScan() {
-        return new DataTableStreamScan(
+        return new DataTableStreamScan( // 生成 DataTableStreamScan
                 tableSchema,
                 coreOptions(),
                 newSnapshotReader(),

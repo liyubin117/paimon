@@ -191,7 +191,7 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
 
     @Override
     public void refresh() {
-        queryExecutor.refresh();
+        queryExecutor.refresh(); // 调用LocalQueryExecutor#refresh
     }
 
     @Override
@@ -282,7 +282,7 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
                                     requireCachedBucketIds == null
                                             ? null
                                             : requireCachedBucketIds::contains)
-                            .newStreamScan();
+                            .newStreamScan(); // 实际调用 AbstractFileStoreTable#newStreamScan
 
             this.tableName = table.name();
             this.defaultNumBuckets = table.bucketSpec().getNumBuckets();
@@ -301,6 +301,7 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
             return tableQuery.lookup(partition, bucket, key);
         }
 
+        // 不停刷新缓存
         @Override
         public void refresh() {
             while (true) {

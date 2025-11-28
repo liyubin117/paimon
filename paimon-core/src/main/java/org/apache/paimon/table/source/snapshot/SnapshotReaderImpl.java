@@ -424,17 +424,30 @@ public class SnapshotReaderImpl implements SnapshotReader {
         return scan.readFileIterator();
     }
 
+    /**
+     * 读取单个快照所带来的变更日志（Changelog）
+     * 比较的不是任意一个“上次保存的快照”，而是当前快照和其紧邻的前一个快照（即 snapshotId 和 snapshotId - 1）之间的差异
+     */
     @Override
     public Plan readChanges() {
+        // 1. 设置扫描模式为 DELTA，不去读取这个快照代表的全量数据，相反，会去读取这个快照的 delta 清单文件。这个清单文件精确地记录了本次提交删除了哪些文件（FileKind.DELETE）以及新增了哪些文件（FileKind.ADD）
         withMode(ScanMode.DELTA);
+        // 2. 基于当前快照（由外部调用者如 DataTableStreamScan 设置）执行 DELTA 扫描
         FileStoreScan.Plan plan = scan.plan();
 
+        // 3. 从 DELTA 扫描结果中分离出 before 和 after 文件
+        // plan.files(FileKind.DELETE) 实际上是这个快照变更前的旧文件
         Map<BinaryRow, Map<Integer, List<ManifestEntry>>> beforeFiles =
                 groupByPartFiles(plan.files(FileKind.DELETE));
+        // plan.files(FileKind.ADD) 是这个快照变更后的新文件
         Map<BinaryRow, Map<Integer, List<ManifestEntry>>> dataFiles =
                 groupByPartFiles(plan.files(FileKind.ADD));
+
+        // 4. 获取当前快照紧邻的前一个快照对象
         LazyField<Snapshot> beforeSnapshot =
                 new LazyField<>(() -> snapshotManager.snapshot(plan.snapshot().id() - 1));
+
+        // 5. 将 before 和 after 文件列表包装成一个 Plan
         return toChangesPlan(true, plan, beforeSnapshot, beforeFiles, dataFiles);
     }
 
@@ -536,6 +549,10 @@ public class SnapshotReaderImpl implements SnapshotReader {
                 plan.watermark(), snapshot == null ? null : snapshot.id(), (List) splits);
     }
 
+    /**
+     * 读取任意两个快照之间差异的
+     * 通过两次 ScanMode.ALL（全量扫描）来分别获取当前快照和指定的 before 快照的全量文件列表，然后计算出它们之间的差集，从而得到这期间的净变化
+     */
     @Override
     public Plan readIncrementalDiff(Snapshot before) {
         withMode(ScanMode.ALL);

@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 /**
  * {@link StartingScanner} for the {@link CoreOptions.StartupMode#FROM_TIMESTAMP} startup mode of a
  * streaming read.
+ * 指定了scan.startup.mode = 'from-timestamp'，调用此起始扫描器
  */
 public class ContinuousFromTimestampStartingScanner extends AbstractStartingScanner {
 
@@ -69,7 +70,7 @@ public class ContinuousFromTimestampStartingScanner extends AbstractStartingScan
     public Result scan(SnapshotReader snapshotReader) {
         if (startingSnapshotId == null) {
             startingSnapshotId =
-                    TimeTravelUtil.earlierThanTimeMills(
+                    TimeTravelUtil.earlierThanTimeMills( // 返回指定时间戳之前的最新快照
                             snapshotManager,
                             changelogManager,
                             startupMillis,
@@ -80,6 +81,6 @@ public class ContinuousFromTimestampStartingScanner extends AbstractStartingScan
             LOG.debug("There is currently no snapshot. Waiting for snapshot generation.");
             return new NoSnapshot();
         }
-        return new NextSnapshot(startingSnapshotId + 1);
+        return new NextSnapshot(startingSnapshotId + 1); // +1即可
     }
 }

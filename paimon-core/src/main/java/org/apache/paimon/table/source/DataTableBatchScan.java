@@ -37,7 +37,9 @@ import java.util.Optional;
 
 import static org.apache.paimon.table.source.PushDownUtils.minmaxAvailable;
 
-/** {@link TableScan} implementation for batch planning. */
+/** {@link TableScan} implementation for batch planning.
+ * 批读数据表
+ * */
 public class DataTableBatchScan extends AbstractDataTableScan {
 
     private StartingScanner startingScanner;
@@ -76,6 +78,9 @@ public class DataTableBatchScan extends AbstractDataTableScan {
         return this;
     }
 
+    /**
+     * 在扫描文件元数据时，只规划足够满足 limit 数量的数据文件，从而避免读取整个表，极大地提升了小查询的性能
+     */
     @Override
     public InnerTableScan withLimit(int limit) {
         this.pushDownLimit = limit;
@@ -88,16 +93,21 @@ public class DataTableBatchScan extends AbstractDataTableScan {
         return this;
     }
 
+    /**
+     * 批读的核心逻辑，只执行一次
+     */
     @Override
     public TableScan.Plan plan() {
         authQuery();
 
         if (startingScanner == null) {
+            // 调用父类方法创建扫描器，传入 false 表示是批处理模式
             startingScanner = createStartingScanner(false);
         }
 
         if (hasNext) {
-            hasNext = false;
+            // 第一次调用 plan() 时，hasNext 为 true
+            hasNext = false; // 立刻设置为 false
             Optional<StartingScanner.Result> pushed = applyPushDownLimit();
             if (pushed.isPresent()) {
                 return DataFilePlan.fromResult(pushed.get());
@@ -108,10 +118,14 @@ public class DataTableBatchScan extends AbstractDataTableScan {
             }
             return DataFilePlan.fromResult(startingScanner.scan(snapshotReader));
         } else {
+            // 第二次及以后调用 plan()，直接抛出异常，表示扫描已结束
             throw new EndOfScanException();
         }
     }
 
+    /**
+     * 可以高效地列出所有分区信息，这对于元数据查询和某些优化（如 Flink 的 PartitionPruner）非常有用
+     */
     @Override
     public List<PartitionEntry> listPartitionEntries() {
         if (startingScanner == null) {
