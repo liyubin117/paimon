@@ -57,6 +57,7 @@ import static org.apache.paimon.table.BucketMode.POSTPONE_BUCKET;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
 /** Lookup table for primary key which supports to read the LSM tree directly.
+ * 当配置 lookup.cache (即 LOOKUP_CACHE_MODE) 为 AUTO (默认值)，并且维表 JOIN 的键 ( joinKeys ) 与维表的主键 ( table.primaryKeys() ) 完全一致时
  * 根据上游流数据 Join Key 的值，计算出这个 Key 对应 Paimon 表中的哪个 Bucket，然后只加载该 Bucket 的数据
  * 这样，每个 Flink 的 Lookup 并发实例就不再需要加载维表的全量数据，而只需要负责一部分 Bucket 的数据，极大地降低了单个节点的内存消耗和启动时间。
  * */

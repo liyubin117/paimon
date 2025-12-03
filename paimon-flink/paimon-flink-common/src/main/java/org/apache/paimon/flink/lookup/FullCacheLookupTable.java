@@ -73,7 +73,9 @@ import static org.apache.paimon.flink.FlinkConnectorOptions.LOOKUP_REFRESH_ASYNC
 import static org.apache.paimon.flink.FlinkConnectorOptions.LookupCacheMode.MEMORY;
 
 /** Lookup table of full cache.
- * 对于已经拉取到本地的数据，Paimon 会将其加载到内嵌的 RocksDB 实例中，构建 Key-Value 索引。这样，后续的 Lookup 操作就变成了对本地 RocksDB 的高效点查，而不是对原始文件的扫描。FullCacheLookupTable 和 NoPrimaryKeyLookupTable 等类都利用了 RocksDB 的能力
+ * 当配置 lookup.cache 为 FULL，或是AUTO但不符合PrimaryKeyPartialLookupTable条件（join键非主键）
+ * 将维表数据（或经过谓词筛选的bucket数据）全部加载到本地的 RocksDB 缓存中，构建 Key-Value 索引。这样，后续的 Lookup 操作就变成了对本地 RocksDB 的高效点查，而不是对原始文件的扫描。
+ * FullCacheLookupTable 和 NoPrimaryKeyLookupTable 等类都利用了 RocksDB 的能力
  * */
 public abstract class FullCacheLookupTable implements LookupTable {
 
@@ -358,14 +360,15 @@ public abstract class FullCacheLookupTable implements LookupTable {
         void finish() throws IOException;
     }
 
+    // 静态工厂方法，根据表的特性（是否有主键、JOIN 键是否为二级索引等）创建具体的子类
     static FullCacheLookupTable create(Context context, long lruCacheSize) {
         List<String> primaryKeys = context.table.primaryKeys();
-        if (primaryKeys.isEmpty()) {
+        if (primaryKeys.isEmpty()) { // 表没有主键
             return new NoPrimaryKeyLookupTable(context, lruCacheSize);
         } else {
-            if (new HashSet<>(primaryKeys).equals(new HashSet<>(context.joinKey))) {
+            if (new HashSet<>(primaryKeys).equals(new HashSet<>(context.joinKey))) { // 表有主键，并且 JOIN 键是主键
                 return new PrimaryKeyLookupTable(context, lruCacheSize, context.joinKey);
-            } else {
+            } else { // 表有主键，但JOIN键非主键，用二级索引方式
                 return new SecondaryIndexLookupTable(context, lruCacheSize);
             }
         }

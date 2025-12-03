@@ -281,6 +281,7 @@ public abstract class BaseDataTableSource extends FlinkTableSource
         Options options = new Options(table.options());
         boolean enableAsync = options.get(LOOKUP_ASYNC);
         int asyncThreadNumber = options.get(LOOKUP_ASYNC_THREAD_NUMBER);
+        // 在Flink Source接口实现类中调用生成FileStoreLookupFunction
         return LookupRuntimeProviderFactory.create(
                 getFileStoreLookupFunction(
                         context,

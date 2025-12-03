@@ -26,16 +26,23 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
-/** A lookup table which provides get and refresh. */
+/** A lookup table which provides get and refresh.
+ * 定义了维表初始化、查找和缓存管理的基本操作
+ * */
 public interface LookupTable extends Closeable {
 
+    // 为scan.partitions场景设置分区过滤器
     void specificPartitionFilter(Predicate filter);
 
+    // 加载初始缓存
     void open() throws Exception;
 
+    // 根据指定的key查找匹配的所有行
     List<InternalRow> get(InternalRow key) throws IOException;
 
+    // 刷新缓存
     void refresh() throws Exception;
 
+    // 设置缓存的行过滤器
     void specifyCacheRowFilter(Filter<InternalRow> filter);
 }

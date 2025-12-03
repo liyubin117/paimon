@@ -74,15 +74,26 @@ import static org.apache.paimon.lookup.rocksdb.RocksDBOptions.LOOKUP_CACHE_ROWS;
 import static org.apache.paimon.lookup.rocksdb.RocksDBOptions.LOOKUP_CONTINUOUS_DISCOVERY_INTERVAL;
 import static org.apache.paimon.predicate.PredicateBuilder.transformFieldMapping;
 
-/** A lookup {@link TableFunction} for file store. */
+/** A lookup {@link TableFunction} for file store.
+ * 是执行维表查找逻辑的主要类。它本身虽然没有直接实现 Flink 的 TableFunction 接口，但它被具体的 Flink 版本相关的包装类所使用：
+ *  OldLookupFunction (用于 Flink 1.15 1.16): 继承自 org.apache.flink.table.functions.TableFunction
+ *  NewLookupFunction (用于 Flink 1.17+): 继承自 org.apache.flink.table.functions.LookupFunction
+ *
+ *  依赖LookupTable完成实际的维表查找和缓存管理
+ *
+ * 核心职责:
+ *  生命周期管理: 在 open() 方法中初始化维表数据（通过 LookupTable），在 close() 方法中释放资源。
+ *  数据查找: 在 lookup() 方法中接收流数据中的关联键，并调用 LookupTable 进行查找。
+ *  缓存刷新: 通过 tryRefresh() 方法管理维表缓存的刷新逻辑。
+ * */
 public class FileStoreLookupFunction implements Serializable, Closeable {
 
     private static final long serialVersionUID = 1L;
 
     private static final Logger LOG = LoggerFactory.getLogger(FileStoreLookupFunction.class);
 
-    private final FileStoreTable table;
-    @Nullable private final PartitionLoader partitionLoader;
+    private final FileStoreTable table; // 维表
+    @Nullable private final PartitionLoader partitionLoader; // 用于处理动态分区scan.partitions
     private final List<String> projectFields;
     private final List<String> joinKeys;
     @Nullable private final Predicate predicate;
@@ -92,11 +103,11 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
     private final List<InternalRow.FieldGetter> projectFieldsGetters;
 
     private transient File path;
-    private transient LookupTable lookupTable;
+    private transient LookupTable lookupTable; // 实际执行查找和缓存的组件
 
-    // interval of refreshing lookup table
+    // interval of refreshing lookup table 缓存刷新间隔
     private transient Duration refreshInterval;
-    // timestamp when refreshing lookup table
+    // timestamp when refreshing lookup table 下一次刷新的时间戳
     private transient long nextRefreshTime;
 
     protected FunctionContext functionContext;
@@ -153,9 +164,10 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
         this.strategy = strategy;
     }
 
+    // open()入口方法，被LookupFunction调用
     public void open(FunctionContext context) throws Exception {
         this.functionContext = context;
-        String tmpDirectory = getTmpDirectory(context);
+        String tmpDirectory = getTmpDirectory(context); // 获取临时目录
         open(tmpDirectory);
     }
 
@@ -194,7 +206,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
                         "Remote service is available. Created PrimaryKeyPartialLookupTable with remote service.");
             } else {
                 try {
-                    // 当query service服务未启动时，优先启用partial cache
+                    // 当query service服务未启动时，优先启用partial cache，不会将整个维表加载到缓存中，而是在需要时根据主键去查询加载了对应bucket的缓存数据
                     this.lookupTable =
                             PrimaryKeyPartialLookupTable.createLocalTable(
                                     table, projection, path, joinKeys, getRequireCachedBucketIds());
@@ -209,7 +221,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
             }
         }
 
-        if (lookupTable == null) {
+        if (lookupTable == null) { // 若前面条件都未满足，使用FullCacheLookupTable
             FullCacheLookupTable.Context context =
                     new FullCacheLookupTable.Context(
                             table,
@@ -223,7 +235,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
             LOG.info("Created {}.", lookupTable.getClass().getSimpleName());
         }
 
-        if (partitionLoader != null) {
+        if (partitionLoader != null) { // 如果设置了scan.partitions，打开 partitionLoader，检查并加载分区信息，然后调用 lookupTable.specificPartitionFilter()
             partitionLoader.open();
             partitionLoader.checkRefresh();
             List<BinaryRow> partitions = partitionLoader.partitions();
@@ -232,10 +244,10 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
             }
         }
 
-        if (cacheRowFilter != null) {
+        if (cacheRowFilter != null) { // 缓存的行过滤
             lookupTable.specifyCacheRowFilter(cacheRowFilter);
         }
-        lookupTable.open();
+        lookupTable.open(); // 触发实际的缓存加载
     }
 
     @Nullable
@@ -254,22 +266,25 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
         return adjustedPredicate;
     }
 
+    /**
+     * 当流数据到达需要进行维表关联的算子时，Flink 会调用包装类的 eval(...) (Old) 或 lookup(...) (New) 方法，这些方法内部会调用该方法
+     */
     public Collection<RowData> lookup(RowData keyRow) {
         try {
-            tryRefresh();
+            tryRefresh(); // 尝试刷新缓存
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("lookup key:{}", keyRow.toString());
             }
             InternalRow key = new FlinkRowWrapper(keyRow);
-            if (partitionLoader == null) {
+            if (partitionLoader == null) { // 若没有指定scan.partitions，则直接用原始的key查找
                 return lookupInternal(key);
             }
 
             if (partitionLoader.partitions().isEmpty()) {
                 return Collections.emptyList();
             }
-
+            // 如果 partitionLoader 存在且有分区数据，会遍历每个分区，将原始 key 与分区信息通过 JoinedRow.join(key, partition) 合并成新的 key，然后调用 lookupInternal
             List<RowData> rows = new ArrayList<>();
             for (BinaryRow partition : partitionLoader.partitions()) {
                 rows.addAll(lookupInternal(JoinedRow.join(key, partition)));
@@ -285,7 +300,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
 
     private List<RowData> lookupInternal(InternalRow key) throws IOException {
         List<RowData> rows = new ArrayList<>();
-        List<InternalRow> lookupResults = lookupTable.get(key);
+        List<InternalRow> lookupResults = lookupTable.get(key); // 从缓存获取匹配的数据
         for (InternalRow matchedRow : lookupResults) {
             rows.add(new FlinkRowData(matchedRow));
         }
@@ -313,25 +328,25 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
 
     @VisibleForTesting
     void tryRefresh() throws Exception {
-        // 1. check if this time is in black list
+        // 1. check if this time is in black list 检查当前时间是否在刷新黑名单 (refreshBlacklist) 内
         if (refreshBlacklist != null && !refreshBlacklist.canRefresh()) {
             return;
         }
 
-        // 2. refresh dynamic partition
+        // 2. refresh dynamic partition 如果 partitionLoader 存在，刷新动态分区
         if (partitionLoader != null) {
-            boolean partitionChanged = partitionLoader.checkRefresh();
+            boolean partitionChanged = partitionLoader.checkRefresh(); // 检查是否分区有变化
             List<BinaryRow> partitions = partitionLoader.partitions();
             if (partitions.isEmpty()) {
                 // no data to be load, fast exit
                 return;
             }
 
-            if (partitionChanged) {
+            if (partitionChanged) { // 如果分区发生变化
                 // reopen with latest partition
-                lookupTable.specificPartitionFilter(partitionLoader.createSpecificPartFilter());
+                lookupTable.specificPartitionFilter(partitionLoader.createSpecificPartFilter()); // 更新分区过滤器
                 lookupTable.close();
-                lookupTable.open();
+                lookupTable.open(); // 先close再open，重新加载缓存
                 // no need to refresh the lookup table because it is reopened
                 return;
             }
@@ -368,6 +383,7 @@ public class FileStoreLookupFunction implements Serializable, Closeable {
         return refreshBlacklist == null ? -1 : refreshBlacklist.nextBlacklistCheckTime();
     }
 
+    // 释放 LookupTable 持有的资源（如 RocksDB 实例、文件句柄、线程池等）；将lookupTable置空；删除本地临时文件目录
     @Override
     public void close() throws IOException {
         if (lookupTable != null) {
