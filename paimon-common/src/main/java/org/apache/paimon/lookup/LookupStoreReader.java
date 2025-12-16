@@ -26,7 +26,9 @@ import java.io.IOException;
 /** Reader, lookup value by key bytes. */
 public interface LookupStoreReader extends Closeable {
 
-    /** Lookup value by key. */
+    /** Lookup value by key.
+     * 根据给定的 key 从本地查找文件中查找对应的 value
+     * */
     @Nullable
     byte[] lookup(byte[] key) throws IOException;
 }

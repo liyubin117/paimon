@@ -38,7 +38,13 @@ import java.util.Comparator;
 import static org.apache.paimon.lookup.sort.SortLookupStoreUtils.crc32c;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
-/** A {@link LookupStoreReader} for sort store. */
+/** A {@link LookupStoreReader} for sort store.
+ * 通过一个分层的查找策略，按需、分块来高效读取数据：
+ *  文件级元数据：读取 Footer。
+ *  快速过滤：可选的布隆过滤器。
+ *  索引块查找：通过 BlockCache 加载索引块，并使用 BlockIterator 在索引块内二分查找，定位到目标数据块的句柄。
+ *  数据块查找：通过 BlockCache 加载目标数据块（可能涉及解压缩），并使用新的 BlockIterator 在数据块内二分查找，精确定位 key。
+ * */
 public class SortLookupStoreReader implements LookupStoreReader {
 
     private final Comparator<MemorySlice> comparator;
@@ -47,9 +53,10 @@ public class SortLookupStoreReader implements LookupStoreReader {
 
     private final BlockIterator indexBlockIterator;
     @Nullable private FileBasedBloomFilter bloomFilter;
-    private final BlockCache blockCache;
+    private final BlockCache blockCache; // 使用 BlockCache (由 CacheManager 管理) 来缓存从磁盘读取的数据块和索引块，减少磁盘 I/O
     private final PageFileInput fileInput;
 
+    // 初始化：打开 localFile，读取 Footer 来定位索引块和 Bloom Filter。加载 Bloom Filter (如果存在)
     public SortLookupStoreReader(
             Comparator<MemorySlice> comparator,
             File file,
@@ -63,8 +70,8 @@ public class SortLookupStoreReader implements LookupStoreReader {
 
         this.fileInput = PageFileInput.create(file, blockSize, null, fileSize, null);
         this.blockCache = new BlockCache(fileInput.file(), cacheManager);
-        Footer footer = readFooter();
-        this.indexBlockIterator = readBlock(footer.getIndexBlockHandle(), true).iterator();
+        Footer footer = readFooter(); // 从BlockCache读取footer
+        this.indexBlockIterator = readBlock(footer.getIndexBlockHandle(), true).iterator(); // 根据footer中的索引块handle创建对应的BlockIterator
         BloomFilterHandle handle = footer.getBloomFilterHandle();
         if (handle != null) {
             this.bloomFilter =

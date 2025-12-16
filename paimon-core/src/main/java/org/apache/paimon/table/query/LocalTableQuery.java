@@ -69,13 +69,13 @@ public class LocalTableQuery implements TableQuery {
 
     private final KeyValueFileReaderFactory.Builder readerFactoryBuilder;
 
-    private final LookupStoreFactory lookupStoreFactory;
+    private final LookupStoreFactory lookupStoreFactory; // 用于创建对lookup缓存文件的读写
 
     private final int startLevel;
 
     private IOManager ioManager;
 
-    @Nullable private Cache<String, LookupFile> lookupFileCache;
+    @Nullable private Cache<String, LookupFile> lookupFileCache; // LocalTableQuery内定义了Caffeine cache实例，配置了基于访问时间的过期策略 (expireAfterAccess) 和最大磁盘占用 (maximumWeight)，这构成了 LRU 的基础
 
     private final RowType rowType;
     private final RowType partitionType;
@@ -98,6 +98,7 @@ public class LocalTableQuery implements TableQuery {
         RowType keyType = readerFactoryBuilder.keyType();
         this.keyComparatorSupplier = new KeyComparatorSupplier(readerFactoryBuilder.keyType());
         this.lookupStoreFactory =
+                // 根据lookup.local-file-type配置决定本地查找文件的类型（排序型、哈希型）
                 LookupStoreFactory.create(
                         options,
                         new CacheManager(
@@ -107,6 +108,11 @@ public class LocalTableQuery implements TableQuery {
         startLevel = options.needLookup() ? 1 : 0;
     }
 
+    /**
+     * 该方法用于刷新指定分区和桶下的数据文件列表。
+     * 如果该分区和桶尚未初始化，则调用 newLookupLevels 方法进行初始化；
+     * 否则，复用已有的 LookupLevels 实例，并通过 update 方法更新其内部文件列表，以反映最新的文件变化。
+     */
     public void refreshFiles(
             BinaryRow partition,
             int bucket,
@@ -123,6 +129,7 @@ public class LocalTableQuery implements TableQuery {
     }
 
     private void newLookupLevels(BinaryRow partition, int bucket, List<DataFileMeta> dataFiles) {
+        // 使用传入的 dataFiles (当前有效的数据文件元信息) 和 keyComparator 来初始化 Levels
         Levels levels = new Levels(keyComparatorSupplier.get(), dataFiles, options.numLevels());
         // TODO pass DeletionVector factory
         KeyValueFileReaderFactory factory =
@@ -130,14 +137,14 @@ public class LocalTableQuery implements TableQuery {
         Options options = this.options.toConfiguration();
         if (lookupFileCache == null) {
             lookupFileCache =
-                    LookupFile.createCache(
+                    LookupFile.createCache( // 创建文件缓存
                             options.get(CoreOptions.LOOKUP_CACHE_FILE_RETENTION),
                             options.get(CoreOptions.LOOKUP_CACHE_MAX_DISK_SIZE));
         }
 
         LookupLevels<KeyValue> lookupLevels =
                 new LookupLevels<>(
-                        levels,
+                        levels, // 将创建的 Levels 实例传递给 LookupLevels，其会利用 Levels 提供的分层文件信息来进行高效的键查找，并可能为这些 DataFileMeta 创建本地的 "lookup file" 以进一步加速。当 refreshFiles 被调用且 LookupLevels 实例已存在时，会调用 lookupLevels.getLevels().update(beforeFiles, dataFiles) 来更新 Levels 内部的文件列表
                         keyComparatorSupplier.get(),
                         readerFactoryBuilder.keyType(),
                         new LookupLevels.KeyValueProcessor(readerFactoryBuilder.readValueType()),
@@ -163,7 +170,49 @@ public class LocalTableQuery implements TableQuery {
         tableView.computeIfAbsent(partition, k -> new HashMap<>()).put(bucket, lookupLevels);
     }
 
-    /** TODO remove synchronized and supports multiple thread to lookup. */
+    /**
+     * LookupLevels.lookup(key, startLevel)
+     *    |
+     *    调用--> 2. LookupUtils.lookup(levels, key, startLevel, llLookupRun, llLookupLevel0)
+     *              |
+     *              +-- 遍历 levels (从 startLevel 开始):
+     *                  |
+     *                  +-- IF 当前层级 == 0:
+     *                  |   |
+     *                  |   调用--> 3. llLookupLevel0(key, level0Files)  (即 LookupLevels.lookupLevel0)
+     *                  |             |
+     *                  |             调用--> 4. LookupUtils.lookupLevel0(comparator, key, level0Files, llLookupFile)
+     *                  |                       |
+     *                  |                       +-- 遍历 level0Files 中的每个 DataFileMeta:
+     *                  |                           |
+     *                  |                           +-- IF key 在文件范围内:
+     *                  |                               |
+     *                  |                               调用--> 5. llLookupFile(key, dataFileMeta) (即 LookupLevels.lookup(InternalRow, DataFileMeta))
+     *                  |                                         |
+     *                  |                                         +-- 尝试从 lookupFileCache 获取 LookupFile
+     *                  |                                         +-- IF 缓存未命中:
+     *                  |                                         |   |
+     *                  |                                         |   调用--> 6. LookupLevels.createLookupFile(dataFileMeta)
+     *                  |                                         |             (创建本地查找文件, 填充数据)
+     *                  |                                         |
+     *                  |                                         +-- 从 LookupFile 中获取序列化的 valueBytes
+     *                  |                                         +-- 调用 valueProcessor.readFromDisk(...) 转换结果
+     *                  |                                         +-- RETURN 结果 (如果找到)
+     *                  |
+     *                  +-- ELSE (当前层级 > 0):
+     *                      |
+     *                      调用--> 7. llLookupRun(key, sortedRunForLevel) (即 LookupLevels.lookup(InternalRow, SortedRun))
+     *                                |
+     *                                调用--> 8. LookupUtils.lookup(comparator, key, sortedRunForLevel, llLookupFile)
+     *                                          |
+     *                                          +-- 在 sortedRunForLevel 的文件中进行二分查找，找到合适的 DataFileMeta
+     *                                          +-- IF 找到文件:
+     *                                              |
+     *                                              调用--> 5. llLookupFile(key, dataFileMeta) (同上)
+     *                                                        |
+     *                                                        +-- (与上述步骤 5 逻辑相同)
+     *                                                        +-- RETURN 结果 (如果找到)
+     */
     @Nullable
     @Override
     public synchronized InternalRow lookup(BinaryRow partition, int bucket, InternalRow key)
@@ -177,7 +226,7 @@ public class LocalTableQuery implements TableQuery {
             return null;
         }
 
-        KeyValue kv = lookupLevels.lookup(key, startLevel);
+        KeyValue kv = lookupLevels.lookup(key, startLevel); // 核心
         if (kv == null || kv.valueKind().isRetract()) {
             return null;
         } else {

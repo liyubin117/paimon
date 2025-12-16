@@ -37,6 +37,7 @@ import java.util.function.Function;
 /**
  * A key-value store for lookup, key-value store should be single binary file written once and ready
  * to be used. This factory provide two interfaces:
+ * 本地文件的选择由配置项 CoreOptions.LOOKUP_LOCAL_FILE_TYPE 决定，主要有两种：SORT（默认） 和 HASH
  *
  * <ul>
  *   <li>Writer: written once to prepare binary file.

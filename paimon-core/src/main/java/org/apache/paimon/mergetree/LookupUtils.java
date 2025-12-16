@@ -32,6 +32,9 @@ import java.util.TreeSet;
 /** Utils for lookup. */
 public class LookupUtils {
 
+    /**
+     * 对Levels多层，从startLevel开始，查找到指定key的值
+     */
     public static <T> T lookup(
             Levels levels,
             InternalRow key,
@@ -42,9 +45,9 @@ public class LookupUtils {
 
         T result = null;
         for (int i = startLevel; i < levels.numberOfLevels(); i++) {
-            if (i == 0) {
+            if (i == 0) { // 查level0，调用LookupUtils.lookupLevel0，依次查找
                 result = level0Lookup.apply(key, levels.level0());
-            } else {
+            } else { // 查level1+，调用LookupUtils.lookup，二分查找
                 SortedRun level = levels.runOfLevel(i);
                 result = lookup.apply(key, level);
             }
@@ -63,9 +66,9 @@ public class LookupUtils {
             BiFunctionWithIOE<InternalRow, DataFileMeta, T> lookup)
             throws IOException {
         T result = null;
-        for (DataFileMeta file : level0) {
+        for (DataFileMeta file : level0) { // 遍历 level0 的每个 DataFileMeta
             if (keyComparator.compare(file.maxKey(), target) >= 0
-                    && keyComparator.compare(file.minKey(), target) <= 0) {
+                    && keyComparator.compare(file.minKey(), target) <= 0) { // 如果key在此文件范围内，调用LookupLevels#lookup
                 result = lookup.apply(target, file);
                 if (result != null) {
                     break;
@@ -76,6 +79,9 @@ public class LookupUtils {
         return result;
     }
 
+    /**
+     * 1+层的这些SortedRun是有序的，因此可二分查找
+     */
     public static <T> T lookup(
             Comparator<InternalRow> keyComparator,
             InternalRow target,

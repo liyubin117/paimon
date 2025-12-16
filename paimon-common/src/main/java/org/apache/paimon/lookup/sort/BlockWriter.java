@@ -50,6 +50,9 @@ public class BlockWriter {
         this.aligned = true;
     }
 
+    /**
+     * 除了把键值对写入时，还记录该键值对在数据块的起始位置作为索引
+     */
     public void add(byte[] key, byte[] value) {
         int startPosition = block.size();
         block.writeVarLenInt(key.length);

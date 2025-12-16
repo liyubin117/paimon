@@ -63,7 +63,7 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
     private final Function<String, File> localFileFactory;
     private final LookupStoreFactory lookupStoreFactory;
     private final Function<Long, BloomFilter.Builder> bfGenerator;
-
+    // 由 Caffeine 库实现的缓存，键是远程数据文件的名字，唯一标识，值对应LookupFile对象，即本地副本或索引
     private final Cache<String, LookupFile> lookupFileCache;
     private final Set<String> ownCachedFiles;
 
@@ -125,7 +125,13 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
     }
 
     /**
-     * lookup的关键逻辑
+     * lookup的关键逻辑：
+     * 打开远程文件 -> 逐条读取 -> 写入本地优化文件 -> 关闭本地文件 -> 创建 LookupFile 句柄。这个 LookupFile 对象随后会被放入 lookupFileCache 中供后续查询使用
+     *
+     * 当 LookupLevels 需要对一个 DataFileMeta 文件进行键查找时（在其 lookup(InternalRow key, DataFileMeta file) 方法中），它会首先尝试从 lookupFileCache 中根据文件名获取 LookupFile。
+     * 如果缓存命中，则直接使用返回的 LookupFile 对象进行本地查询，速度很快。
+     * 如果缓存未命中，LookupLevels 会调用 createLookupFile 方法创建一个新的 LookupFile 实例（这可能涉及从远程存储下载数据并在本地构建索引），
+     * 然后将这个新创建的 LookupFile 放入 lookupFileCache 中，以便后续查询可以复用。
      */
     @Nullable
     private T lookup(InternalRow key, DataFileMeta file) throws IOException {
@@ -133,17 +139,17 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
 
         boolean newCreatedLookupFile = false;
         if (lookupFile == null) {
-            lookupFile = createLookupFile(file); // 如果缓存未命中，则构建
+            lookupFile = createLookupFile(file); // 如果缓存未命中，则构建lookup文件
             newCreatedLookupFile = true;
         }
 
         byte[] valueBytes;
         try {
             byte[] keyBytes = keySerializer.serializeToBytes(key);
-            valueBytes = lookupFile.get(keyBytes);
+            valueBytes = lookupFile.get(keyBytes); // 从构建出的lookup文件序列化后的字节数组
         } finally {
             if (newCreatedLookupFile) {
-                lookupFileCache.put(file.fileName(), lookupFile);
+                lookupFileCache.put(file.fileName(), lookupFile); // 将获取的结果加到缓存
             }
         }
         if (valueBytes == null) {
@@ -151,25 +157,28 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
         }
 
         return valueProcessor.readFromDisk(
-                key, lookupFile.remoteFile().level(), valueBytes, file.fileName());
+                key, lookupFile.remoteFile().level(), valueBytes, file.fileName()); // 转换结果
     }
 
     private LookupFile createLookupFile(DataFileMeta file) throws IOException {
-        // 读取 DataFileMeta 指向的远程数据文件
+        // 读取 DataFileMeta 指向的远程数据文件，根据远程文件名和分区/桶信息生成一个唯一的本地文件名
         File localFile = localFileFactory.apply(file.fileName());
-        if (!localFile.createNewFile()) {
+        if (!localFile.createNewFile()) { // 在本地磁盘创建这个空文件
             throw new IOException("Can not create new file: " + localFile);
         }
 
-        // 将文件中的所有 Key-Value 对写入一个新的、本地的、为快速查找而优化的文件中
+        // 根据lookup.local-file-type创建LookupStoreWriter，将文件中的所有 Key-Value 对写入一个新的、本地的、为快速查找而优化的文件中
         LookupStoreWriter kvWriter =
                 lookupStoreFactory.createWriter(localFile, bfGenerator.apply(file.rowCount()));
         LookupStoreFactory.Context context;
+        // 创建RecordReader读取远程DataFileMeta
         try (RecordReader<KeyValue> reader = fileReaderFactory.apply(file)) {
             KeyValue kv;
             if (valueProcessor.withPosition()) {
                 FileRecordIterator<KeyValue> batch;
+                // 按批循环读取远程文件的每一条kv
                 while ((batch = (FileRecordIterator<KeyValue>) reader.readBatch()) != null) {
+                    // 通过LookupStoreWriter把读取到的kv写入本地临时文件
                     while ((kv = batch.next()) != null) {
                         byte[] keyBytes = keySerializer.serializeToBytes(kv.key());
                         byte[] valueBytes =
@@ -193,11 +202,13 @@ public class LookupLevels<T> implements Levels.DropFileCallback, Closeable {
             FileIOUtils.deleteFileOrDirectory(localFile);
             throw e;
         } finally {
+            // 关闭LookupStoreWriter，确保所有数据的刷盘，完成本地文件的构建，返回包含了写入文件的元数据（索引块、bloomfilter的位置等）的context对象
             context = kvWriter.close();
         }
 
-        // 将这个新建的本地文件封装成 LookupFile 对象，并以远程文件的名字为 Key 存入缓存
+        // 以远程文件的名字为 Key 存入缓存
         ownCachedFiles.add(file.fileName());
+        // 把新建的本地文件、远程文件、新建的LookupStoreReader、清理回调，封装成 LookupFile 对象
         return new LookupFile(
                 localFile,
                 file,

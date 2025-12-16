@@ -53,7 +53,13 @@ import java.util.UUID;
  * Software Foundation (ASF) under the Apache License, Version 2.0. See the NOTICE file distributed with this work for
  * additional information regarding copyright ownership. */
 
-/** Internal write implementation for hash kv store. */
+/** Internal write implementation for hash kv store.
+ * 在写入键值对时，会计算键的哈希值，并将键值对存储到对应的哈希桶中。
+ * 它需要处理哈希冲突，可能使用链式地址法或开放地址法等。
+ * 最终写入到 localFile 的内容会包括哈希表的桶数组（或指向桶的指针/偏移量）以及实际的键值数据。
+ * 也可以配置生成 Bloom Filter。
+ * HashContext 会记录诸如桶的数量、加载因子、Bloom Filter 信息等
+ * */
 public class HashLookupStoreWriter implements LookupStoreWriter {
 
     private static final Logger LOG =

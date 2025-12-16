@@ -42,6 +42,11 @@ public class BlockReader {
         BlockAlignedType alignedType =
                 BlockAlignedType.fromByte(block.readByte(block.length() - 1));
         int intValue = block.readInt(block.length() - 5);
+        /**
+         * 根据对齐方式，创建相应类型的 BlockIterator：
+         * AlignedIterator: 用于固定长度记录的块。
+         * UnalignedIterator: 用于变长记录的块。变长记录块的尾部会有一个小的内部索引，记录每个记录的起始偏移
+         */
         if (alignedType == ALIGNED) {
             return new AlignedIterator(block.slice(0, block.length() - 5), intValue, comparator);
         } else {

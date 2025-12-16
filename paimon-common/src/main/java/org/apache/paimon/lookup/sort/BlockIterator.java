@@ -28,7 +28,9 @@ import java.util.NoSuchElementException;
 
 import static java.util.Objects.requireNonNull;
 
-/** An {@link Iterator} for a block. */
+/** An {@link Iterator} for a block.
+ * 负责在单个内存块内进行迭代和查找
+ * */
 public abstract class BlockIterator implements Iterator<Map.Entry<MemorySlice, MemorySlice>> {
 
     protected final MemorySliceInput data;
@@ -38,6 +40,11 @@ public abstract class BlockIterator implements Iterator<Map.Entry<MemorySlice, M
 
     private BlockEntry polled;
 
+    /**
+     * @param data 块数据
+     * @param recordCount 条数
+     * @param comparator 比较器
+     */
     public BlockIterator(
             MemorySliceInput data, int recordCount, Comparator<MemorySlice> comparator) {
         this.data = data;
@@ -70,6 +77,15 @@ public abstract class BlockIterator implements Iterator<Map.Entry<MemorySlice, M
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * 核心方法，使用索引块（通常是一个B+树或者类似的结构，或者简单的排序索引条目）二分查找快速定位可能包含该 key 的数据块。
+     * 1.通过 left 和 right 指针维护查找范围。
+     * 2.在循环中，计算 mid 位置。
+     * 3.调用抽象的 seekTo(int record) 方法，这个方法由子类 (AlignedIterator 或 UnalignedIterator) 实现，用于将 MemorySliceInput data 的读取位置定位到第 record 条记录的开头。
+     * 4.调用 readEntry() 方法从当前位置读取一个完整的 (key, value) 条目。
+     * 5.使用 comparator 比较读取到的 midEntry.getKey() 和 targetKey。
+     * 6.根据比较结果调整 left 或 right 指针，或者如果找到匹配项，则将 midEntry 存入 polled 并返回 true。
+     */
     public boolean seekTo(MemorySlice targetKey) {
         int left = 0;
         int right = recordCount - 1;

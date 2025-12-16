@@ -215,7 +215,7 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
             Set<Integer> requireCachedBucketIds) {
         return new PrimaryKeyPartialLookupTable(
                 (filter, cacheRowFilter) ->
-                        new LocalQueryExecutor(
+                        new LocalQueryExecutor( // 调用生成LocalQueryExecutor
                                 new LookupFileStoreTable(table, joinKey),
                                 projection,
                                 tempPath,
@@ -252,7 +252,7 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
 
         private static final Logger LOG = LoggerFactory.getLogger(LocalQueryExecutor.class);
 
-        private final LocalTableQuery tableQuery;
+        private final LocalTableQuery tableQuery; // LocalQueryExecutor有成员变量LocalTableQuery
         private final StreamTableScan scan;
         private final String tableName;
 
@@ -302,7 +302,13 @@ public class PrimaryKeyPartialLookupTable implements LookupTable {
             return tableQuery.lookup(partition, bucket, key);
         }
 
-        // 不停刷新缓存
+        /**
+         * 不停刷新元数据缓存，作用：
+         * 同步元数据：refresh() 的核心目的是确保 LocalTableQuery 持有的数据文件元数据（即 DataFileMeta 列表）与 Paimon 表的最新状态保持同步。
+         * 感知数据变更：当 Paimon 表发生数据写入、合并、过期等操作导致数据文件布局变化时，StreamTableScan 在下一次 plan() 时会反映这些变化，生成新的 DataSplit。refresh() 通过处理这些新的 DataSplit，使得 LocalTableQuery 能够感知到这些变化。
+         * 保证查找准确性：如果 LocalTableQuery 的元数据不是最新的，那么查找操作可能会在已经不存在的文件中查找，或者遗漏新写入的数据文件，导致查找结果不正确或不完整。refresh() 通过更新 DataFileMeta 信息，保证了后续 lookup 操作的准确性。
+         * 只是刷新元数据，当真正需要访问这些文件进行查找时，lookup file才会被按需创建。
+         */
         @Override
         public void refresh() {
             while (true) {

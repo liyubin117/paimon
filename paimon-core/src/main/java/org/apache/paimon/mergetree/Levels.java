@@ -34,17 +34,32 @@ import java.util.stream.Collectors;
 import static java.util.Collections.emptyList;
 import static org.apache.paimon.utils.Preconditions.checkArgument;
 
-/** A class which stores all level files of merge tree. */
+/** A class which stores all level files of merge tree.
+ * MergeTree 结构中用于组织和管理数据文件元数据（DataFileMeta）的核心组件。
+ * 将数据文件按照其 "level"（层级）进行分层存储，这对于 LSM-Tree (Log-Structured Merge-Tree) 类似的结构非常重要，有助于优化读写性能和 Compaction 过程。
+ * 职责：
+ *  分层组织数据：将数据文件按层级划分，便于管理和优化。
+ *  支持高效查找：通过分层和排序，可以加速键的查找过程。查找通常从 Level 0 开始，逐层向上查找，直到找到目标键或确定键不存在。
+ *  支持 Compaction：Levels 的结构是 Compaction 策略的基础。Compaction 过程会选择某些层级的文件进行合并，将结果写入到更高层级，以减少文件数量、消除冗余数据、提高读取效率。
+ *  元数据管理：Levels.update(List<DataFileMeta> before, List<DataFileMeta> after) 方法用于更新 Levels 中管理的 DataFileMeta 集合，反映表快照的变化。
+ * */
 public class Levels {
-
+    // 键比较器，用于比较数据行中的键，这在构建 SortedRun、查找以及合并过程中至关重要
     private final Comparator<InternalRow> keyComparator;
-
+    // 数据最新写入的层级，通常包含较小且可能重叠的文件。使用 TreeSet 可以根据文件的某些属性（例如，序列号或文件名，取决于比较器的实现，现有Paimon实现是序号降序，名字升序）保持有序，这有助于合并和查找
     private final TreeSet<DataFileMeta> level0;
-
+    // levels 列表中的每个元素代表一个更高层级（Level 1, Level 2, ...）。列表的索引对应层级 - 1
+    // 每个 SortedRun 对象内部包含一组 DataFileMeta，这些文件在该层级内通常是根据主键排序且不重叠的
     private final List<SortedRun> levels;
-
+    // 当 Levels.update() 方法移除某些 DataFileMeta 时，会触发这些回调。例如，LookupLevels 类实现了 DropFileCallback 接口，用于在其管理的 DataFileMeta 被移除时，清理相关的缓存（如本地的 lookup file）
     private final List<DropFileCallback> dropFileCallbacks = new ArrayList<>();
 
+    /**
+     *
+     * @param keyComparator
+     * @param inputFiles
+     * @param numLevels 最大层级数
+     */
     public Levels(
             Comparator<InternalRow> keyComparator, List<DataFileMeta> inputFiles, int numLevels) {
         this.keyComparator = keyComparator;

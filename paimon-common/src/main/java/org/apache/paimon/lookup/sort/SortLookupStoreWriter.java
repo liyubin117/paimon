@@ -44,7 +44,11 @@ import static org.apache.paimon.lookup.sort.SortLookupStoreUtils.crc32c;
 import static org.apache.paimon.memory.MemorySegmentUtils.allocateReuseBytes;
 import static org.apache.paimon.utils.VarLengthIntUtils.encodeInt;
 
-/** A {@link LookupStoreWriter} for sorting. */
+/** A {@link LookupStoreWriter} for sorting.
+ * 用于创建基于排序的键值存储（Lookup Store）文件的核心组件。
+ * 负责将有序的键值对高效地写入磁盘，并构建相应的索引和元数据，以便 SortLookupStoreReader 能够快速地进行查找。
+ * 依赖于调用者已经把键值对排好序然后调用put方法，本身不执行排序
+ * */
 public class SortLookupStoreWriter implements LookupStoreWriter {
 
     private static final Logger LOG =
@@ -54,8 +58,8 @@ public class SortLookupStoreWriter implements LookupStoreWriter {
 
     private final BufferedOutputStream fileOutputStream;
     private final int blockSize;
-    private final BlockWriter dataBlockWriter;
-    private final BlockWriter indexBlockWriter;
+    private final BlockWriter dataBlockWriter; // 数据块写入器
+    private final BlockWriter indexBlockWriter; // 索引块写入器
     @Nullable private final BloomFilter.Builder bloomFilter;
     private final BlockCompressionType compressionType;
     @Nullable private final BlockCompressor blockCompressor;
@@ -91,12 +95,12 @@ public class SortLookupStoreWriter implements LookupStoreWriter {
 
     @Override
     public void put(byte[] key, byte[] value) throws IOException {
-        dataBlockWriter.add(key, value);
+        dataBlockWriter.add(key, value); // 数据被组织成数据块（Data Block），每个数据块都包含若干有序的键值对。当内存中的 dataBlockWriter 累积的数据达到预设的 blockSize 时，或者在最后关闭写入器时，数据块会被刷到磁盘
         if (bloomFilter != null) {
-            bloomFilter.addHash(MurmurHashUtils.hashBytes(key));
+            bloomFilter.addHash(MurmurHashUtils.hashBytes(key)); // 键的哈希值会被添加到布隆过滤器，帮助SortLookupStoreReader快速排除不存在的键
         }
 
-        lastKey = key;
+        lastKey = key; // 记录该数据块的最大键
 
         if (dataBlockWriter.memory() > blockSize) {
             flush();
@@ -112,6 +116,7 @@ public class SortLookupStoreWriter implements LookupStoreWriter {
 
         BlockHandle blockHandle = writeBlock(dataBlockWriter);
         MemorySlice handleEncoding = writeBlockHandle(blockHandle);
+        // 作为索引条目添加到内存中的 indexBlockWriter
         indexBlockWriter.add(lastKey, handleEncoding.copyBytes());
     }
 
@@ -137,6 +142,7 @@ public class SortLookupStoreWriter implements LookupStoreWriter {
                                     offset);
 
             // Don't use the compressed data if compressed less than 12.5%,
+            // 只有当压缩效果达到一定阈值（压缩后大小小于原始大小的 7/8）时，才会实际使用压缩后的数据
             if (compressedSize < block.length() - (block.length() / 8)) {
                 block = new MemorySlice(MemorySegment.wrap(compressed), 0, compressedSize);
                 blockCompressionType = this.compressionType;
@@ -146,11 +152,12 @@ public class SortLookupStoreWriter implements LookupStoreWriter {
         totalCompressedSize += block.length();
 
         // create block trailer
+        // 每个数据块和索引块的尾部都包含CRC32C校验和，用于保证数据完整性
         BlockTrailer blockTrailer =
                 new BlockTrailer(blockCompressionType, crc32c(block, blockCompressionType));
         MemorySlice trailer = BlockTrailer.writeBlockTrailer(blockTrailer);
 
-        // create a handle to this block
+        // create a handle to this block，记录该数据块在文件中的位置和大小，包装成BlockHandle
         BlockHandle blockHandle = new BlockHandle(position, block.length());
 
         // write data

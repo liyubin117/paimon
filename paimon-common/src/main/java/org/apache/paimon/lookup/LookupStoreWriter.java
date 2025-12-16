@@ -25,8 +25,14 @@ import java.io.IOException;
 /** Writer to prepare binary file. */
 public interface LookupStoreWriter {
 
-    /** Put key value to store. */
+    /** Put key value to store.
+     * 将一个键值对写入到底层的本地文件
+     * */
     void put(byte[] key, byte[] value) throws IOException;
 
+    /**
+     * 完成所有写入操作，关闭文件，并返回一个 Context 对象。
+     * 这个 Context 对象通常包含了写入文件的元数据，比如文件大小、Bloom Filter 信息等，这些信息会被 LookupStoreReader 在读取时使用
+     */
     Context close() throws IOException;
 }
